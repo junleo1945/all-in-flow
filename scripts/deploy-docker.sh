@@ -2,7 +2,9 @@
 # 不依赖 docker compose 的部署脚本：构建镜像，并用 docker run 启动 postgres、server、web。
 # 配置项与 docker-compose.yml 保持一致，从项目根目录的 .env 读取（可以不存在，使用默认值）。
 #
-#   scripts/deploy-docker.sh          构建镜像并启动（同名容器会被替换，数据卷保留）
+#   scripts/deploy-docker.sh          本机构建镜像并启动（同名容器会被替换，数据卷保留）
+#   AIF_IMAGE_PREFIX=ghcr.io/<owner> scripts/deploy-docker.sh
+#                                     不构建，直接拉取 GitHub Actions 推送的镜像并启动
 #   scripts/deploy-docker.sh stop     停止并删除三个容器（数据卷保留）
 set -euo pipefail
 
@@ -15,8 +17,19 @@ UPLOAD_VOL=aif-uploads
 PG_CTR=aif-postgres
 SERVER_CTR=aif-server
 WEB_CTR=aif-web
-# 数据库镜像可通过 POSTGRES_IMAGE 覆盖，例如拉取 Docker Hub 不稳定时换成镜像源
-PG_IMAGE="${POSTGRES_IMAGE:-postgres:16-alpine}"
+# 设置 AIF_IMAGE_PREFIX（如 ghcr.io/junleo1945）时，直接拉取 GitHub Actions 构建好的镜像，本机不再构建
+IMAGE_PREFIX="${AIF_IMAGE_PREFIX:-}"
+if [ -n "$IMAGE_PREFIX" ]; then
+  IMAGE_TAG="${AIF_IMAGE_TAG:-latest}"
+  SERVER_IMG="$IMAGE_PREFIX/all-in-flow-server:$IMAGE_TAG"
+  WEB_IMG="$IMAGE_PREFIX/all-in-flow-web:$IMAGE_TAG"
+  PG_IMG="${POSTGRES_IMAGE:-$IMAGE_PREFIX/postgres:16-alpine}"
+else
+  SERVER_IMG=aif-server:latest
+  WEB_IMG=aif-web:latest
+  # 数据库镜像可通过 POSTGRES_IMAGE 覆盖，例如拉取 Docker Hub 不稳定时换成镜像源
+  PG_IMG="${POSTGRES_IMAGE:-postgres:16-alpine}"
+fi
 
 if [ "${1:-}" = "stop" ]; then
   docker rm -f "$WEB_CTR" "$SERVER_CTR" "$PG_CTR" >/dev/null 2>&1 || true
@@ -68,9 +81,16 @@ export PORT=3000
 export MODELS_JSON_PATH=/app/config/models.json
 export ATTACHMENT_DIR=/data/uploads
 
-echo "==> 构建镜像"
-docker build -f Dockerfile.server -t aif-server:latest .
-docker build -f Dockerfile.web -t aif-web:latest .
+if [ -z "$IMAGE_PREFIX" ]; then
+  echo "==> 构建镜像"
+  docker build -f Dockerfile.server -t "$SERVER_IMG" .
+  docker build -f Dockerfile.web -t "$WEB_IMG" .
+else
+  echo "==> 拉取镜像"
+  docker pull "$SERVER_IMG"
+  docker pull "$WEB_IMG"
+  docker pull "$PG_IMG"
+fi
 
 echo "==> 准备网络和数据卷"
 docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
@@ -80,11 +100,11 @@ docker volume create "$UPLOAD_VOL" >/dev/null
 echo "==> 替换已有容器"
 docker rm -f "$WEB_CTR" "$SERVER_CTR" "$PG_CTR" >/dev/null 2>&1 || true
 
-echo "==> 启动数据库（镜像：$PG_IMAGE）"
+echo "==> 启动数据库（镜像：$PG_IMG）"
 docker run -d --name "$PG_CTR" --network "$NET" --restart unless-stopped \
   -e POSTGRES_USER -e POSTGRES_PASSWORD -e POSTGRES_DB \
   -v "$PG_VOL:/var/lib/postgresql/data" \
-  "$PG_IMAGE" >/dev/null
+  "$PG_IMG" >/dev/null
 
 echo "==> 等待数据库就绪"
 for i in $(seq 1 30); do
@@ -120,12 +140,12 @@ docker run -d --name "$SERVER_CTR" --network "$NET" --network-alias server --res
   "${SERVER_ENV_ARGS[@]}" \
   -v "$ROOT/config/models.json:/app/config/models.json:ro" \
   -v "$UPLOAD_VOL:/data/uploads" \
-  aif-server:latest >/dev/null
+  "$SERVER_IMG" >/dev/null
 
 echo "==> 启动前端"
 docker run -d --name "$WEB_CTR" --network "$NET" --restart unless-stopped \
   -p "${WEB_PORT}:80" \
-  aif-web:latest >/dev/null
+  "$WEB_IMG" >/dev/null
 
 echo "==> 完成，当前容器状态："
 docker ps --filter "name=aif-" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
