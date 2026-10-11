@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "n8n": {
+      "type": "http",
+      "url": "https://n8n.nantianmen.dpdns.org/mcp-server/http",
+      "headersHelper": "zsh /Users/king/Desktop/owner-king/all-in-flow/scripts/n8n-mcp-headers.sh"
+    }
+  }
+}

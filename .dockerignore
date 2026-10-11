@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/.git
+**/.claude
+**/.env
+**/.env.*
+!.env.example
+**/reports
+docs

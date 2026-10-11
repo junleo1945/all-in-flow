@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1
+# 服务端镜像：多阶段构建，运行时只包含生产依赖和编译产物。
+FROM node:24-alpine AS build
+RUN corepack enable
+WORKDIR /repo
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
+COPY packages ./packages
+COPY plugins ./plugins
+COPY apps/server ./apps/server
+# workspace 清单需要完整，但构建服务端不需要前端源码
+COPY apps/web/package.json ./apps/web/package.json
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @aif/workflow-ir build \
+ && pnpm --filter @aif/integrations build \
+ && pnpm --filter @aif/evals build \
+ && pnpm --filter @aif/plugin-exporter-skill build \
+ && pnpm --filter @aif/server build
+# 只保留服务端及其生产依赖（workspace 依赖会被复制进来）
+RUN pnpm --filter @aif/server --prod deploy --legacy /out
+
+FROM node:24-alpine AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=build /out ./
+# 迁移文件由 drizzle-kit 生成并提交在仓库中，启动时由 src/db/migrate.ts 执行
+COPY apps/server/drizzle ./drizzle
+# 运行时只需要编译产物，删除复制过来的源码与测试
+RUN rm -rf src test vitest.config.ts tsconfig.json
+# 图片上传目录：数据卷首次挂载时会继承这里的属主
+RUN mkdir -p /data/uploads && chown node:node /data/uploads
+EXPOSE 3000
+USER node
+CMD ["node", "dist/index.js"]

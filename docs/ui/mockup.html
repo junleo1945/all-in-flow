@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>All-in-Flow 界面原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;900&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F3EFE5; --sheet:#FFFDF8; --sheet-2:#FAF7EF;
+  --ink:#1C1B18; --ink-2:#4F4C44; --ink-3:#8A857A;
+  --line:#E4DED0; --line-2:#D2CAB7;
+  --mark:#F4D35E; --ok:#2E7D4F;
+  --det:#2F62D9; --det-bg:#E7EEFC;
+  --llm:#7D4FC4; --llm-bg:#F0E9FA;
+  --hum:#D9701A; --hum-bg:#FCEEDF;
+  --serif:"Noto Serif SC", "Songti SC", serif;
+  --sans:"Noto Sans SC", "PingFang SC", sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, monospace;
+  --hand:"ZCOOL KuaiLe", "Noto Sans SC", sans-serif;
+  --r:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#E8E3D7;color:var(--ink);font:14px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,textarea{font:inherit;color:inherit}
+
+/* ---------- 评审外壳 ---------- */
+.review-bar{position:sticky;top:0;z-index:50;display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+  padding:10px 16px;background:rgba(28,27,24,.94);color:#F3EFE5;backdrop-filter:blur(6px)}
+.review-bar b{font-family:var(--serif);font-weight:900;margin-right:10px;letter-spacing:.02em}
+.review-bar button{padding:5px 12px;border-radius:999px;color:#CFC8B8;font-size:13px;border:1px solid transparent}
+.review-bar button:hover{color:#fff;border-color:#55524A}
+.review-bar button.on{background:#F3EFE5;color:var(--ink)}
+.review-bar .note{margin-left:auto;font-size:12px;color:#8A857A}
+.stage{padding:20px 16px 40px;display:flex;justify-content:center}
+.fit{position:relative}
+.frame{width:1440px;height:900px;transform-origin:top left;position:absolute;left:0;top:0;
+  background:var(--paper);border-radius:14px;overflow:hidden;box-shadow:0 30px 80px -30px rgba(40,30,10,.45),0 0 0 1px rgba(0,0,0,.06)}
+.screen{display:none;height:100%}
+.screen.on{display:flex;flex-direction:column}
+.caption{max-width:1440px;margin:0 auto;padding:0 16px 8px;color:#6E695E;font-size:13px}
+
+/* 纸张纹理 */
+.frame::before{content:"";position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.5;
+  background-image:radial-gradient(rgba(120,100,60,.07) 1px,transparent 1px);background-size:3px 3px}
+.screen{position:relative;z-index:1}
+
+/* ---------- 通用 ---------- */
+.topbar{height:56px;flex:none;display:flex;align-items:center;gap:18px;padding:0 20px;border-bottom:1px solid var(--line);background:rgba(255,253,248,.7)}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--serif);font-weight:900;font-size:17px;letter-spacing:.01em}
+.brand svg{flex:none}
+.user{margin-left:auto;display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:13px}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--paper);display:grid;place-items:center;font-weight:700;font-size:13px}
+.meter{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.meter i{display:block;width:70px;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.meter i::after{content:"";display:block;height:100%;width:var(--v);background:var(--ink-2)}
+.btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;border-radius:8px;font-weight:500}
+.btn-ink{background:var(--ink);color:var(--paper)}
+.btn-ink:hover{background:#000}
+.btn-line{border:1px solid var(--line-2);background:var(--sheet)}
+.btn-line:hover{border-color:var(--ink-3)}
+.tag{display:inline-flex;white-space:nowrap;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:5px;font-size:12px;background:var(--sheet-2);border:1px solid var(--line);color:var(--ink-2)}
+.dot{width:8px;height:8px;border-radius:2px;display:inline-block}
+.dot.det{background:var(--det)}.dot.llm{background:var(--llm)}.dot.hum{background:var(--hum)}
+.mono{font-family:var(--mono)}
+.serif{font-family:var(--serif)}
+.mark{background:linear-gradient(transparent 58%,var(--mark) 58%,var(--mark) 92%,transparent 92%)}
+
+/* ---------- 登录 ---------- */
+.login{flex:1;display:grid;grid-template-columns:1.25fr 1fr}
+.login-left{padding:64px 72px;display:flex;flex-direction:column;border-right:1px solid var(--line);position:relative;overflow:hidden}
+.login-left h1{font-family:var(--serif);font-weight:900;font-size:56px;line-height:1.22;letter-spacing:-.01em;margin-top:84px}
+.login-left p.lead{margin-top:22px;font-size:17px;color:var(--ink-2);max-width:520px}
+.login-left .sketch{position:absolute;right:-30px;bottom:30px;width:640px;opacity:.95}
+.sketch path,.sketch rect,.sketch ellipse,.sketch polygon{stroke-dasharray:900;stroke-dashoffset:900;animation:draw 2.4s ease forwards}
+.sketch .d2{animation-delay:.35s}.sketch .d3{animation-delay:.7s}.sketch .d4{animation-delay:1.05s}.sketch .d5{animation-delay:1.4s}
+.sketch text{opacity:0;animation:fade .6s ease forwards 1.6s}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes fade{to{opacity:1}}
+.login-left .steps{display:flex;gap:28px;margin-top:40px}
+.login-left .steps div{font-size:13px;color:var(--ink-3);max-width:150px}
+.login-left .steps b{display:block;font-family:var(--serif);font-size:15px;color:var(--ink);margin-bottom:2px}
+.login-right{display:grid;place-items:center;background:rgba(255,253,248,.55)}
+.card{background:var(--sheet);border:1px solid var(--line);border-radius:14px;box-shadow:0 1px 0 rgba(0,0,0,.02),0 12px 30px -18px rgba(60,40,10,.25)}
+.login-card{width:400px;padding:36px}
+.login-card h2{font-family:var(--serif);font-size:24px;font-weight:900}
+.login-card .sub{color:var(--ink-3);margin-top:4px;font-size:13px}
+.field{margin-top:20px}
+.field label{display:block;font-size:13px;font-weight:500;margin-bottom:6px}
+.field input{width:100%;height:42px;border:1px solid var(--line-2);border-radius:8px;padding:0 12px;background:#fff;outline:none}
+.field input:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(28,27,24,.08)}
+.login-card .btn{width:100%;justify-content:center;height:44px;margin-top:26px;font-size:15px}
+.notice{margin-top:20px;padding:10px 12px;border-radius:8px;background:var(--hum-bg);color:#8A4A10;font-size:12px;line-height:1.6}
+
+/* ---------- 首页 ---------- */
+.home{flex:1;display:grid;grid-template-columns:1fr 340px;gap:28px;padding:36px 48px;overflow:hidden}
+.greet{font-family:var(--serif);font-weight:900;font-size:34px;letter-spacing:-.01em}
+.greet small{display:block;font-family:var(--sans);font-weight:400;font-size:15px;color:var(--ink-3);margin-top:6px;letter-spacing:0}
+.starter{margin-top:24px;padding:22px 24px;position:relative}
+.starter textarea{width:100%;height:76px;border:0;outline:none;resize:none;background:transparent;font-size:16px;line-height:1.7}
+.starter textarea::placeholder{color:var(--ink-3)}
+.starter-foot{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+.chip{height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--line-2);font-size:13px;color:var(--ink-2);background:var(--sheet)}
+.chip:hover{border-color:var(--ink);color:var(--ink)}
+.starter-foot .btn{margin-left:auto}
+.sec-title{display:flex;align-items:baseline;gap:10px;margin:30px 0 14px}
+.sec-title h3{font-family:var(--serif);font-size:18px;font-weight:900}
+.sec-title span{color:var(--ink-3);font-size:13px}
+.convs{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.conv{padding:0;overflow:hidden;cursor:pointer;transition:transform .15s,box-shadow .15s}
+.conv:hover{transform:translateY(-2px);box-shadow:0 18px 36px -20px rgba(60,40,10,.35)}
+.conv .thumb{height:100px;background:var(--sheet-2);border-bottom:1px solid var(--line);display:grid;place-items:center}
+.conv .thumb.empty{color:var(--ink-3);font-size:12px;font-family:var(--hand)}
+.conv .body{padding:14px 16px}
+.conv h4{font-size:15px;font-weight:700}
+.conv .meta{display:flex;gap:12px;color:var(--ink-3);font-size:12px;margin-top:4px}
+.prog{display:flex;gap:3px;margin-top:12px}
+.prog i{flex:1;height:4px;border-radius:2px;background:var(--line)}
+.prog i.on{background:var(--ink)}
+.prog-label{font-size:12px;color:var(--ink-2);margin-top:6px}
+.tpls{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.tpl{padding:14px 16px;cursor:pointer;transition:border-color .15s}
+.tpl:hover{border-color:var(--ink-3)}
+.tpl b{display:block;font-size:14px}
+.tpl span{font-size:12px;color:var(--ink-3)}
+.tpl .role{float:right;font-size:11px;color:var(--ink-2);border:1px solid var(--line);border-radius:4px;padding:0 6px}
+.side-card{padding:20px}
+.side-card+.side-card{margin-top:16px}
+.side-card h3{font-family:var(--serif);font-size:16px;font-weight:900;margin-bottom:12px}
+.big-num{font-family:var(--mono);font-size:30px;font-weight:600;letter-spacing:-.02em}
+.big-num small{font-size:13px;color:var(--ink-3);font-weight:400}
+.bar{height:8px;border-radius:4px;background:var(--line);margin-top:10px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ink)}
+.wf-list li{list-style:none;display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px dashed var(--line)}
+.wf-list li:first-child{border-top:0;padding-top:0}
+.wf-list .n{font-weight:500;font-size:13px}
+.wf-list .s{font-size:12px;color:var(--ink-3)}
+.wf-list .dl{margin-left:auto;font-size:12px;color:var(--ink-2);border:1px solid var(--line-2);border-radius:6px;padding:2px 8px}
+
+/* ---------- 工作台 ---------- */
+.stepper{display:flex;align-items:center;gap:4px;margin-left:24px}
+.step{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-3);padding:4px 8px;border-radius:6px}
+.step .n{width:18px;height:18px;border-radius:50%;border:1px solid var(--line-2);display:grid;place-items:center;font-family:var(--mono);font-size:10px}
+.step.done{color:var(--ink-2)}
+.step.done .n{background:var(--ink-2);border-color:var(--ink-2);color:var(--paper)}
+.step.cur{color:var(--ink);font-weight:700;background:var(--sheet);box-shadow:0 0 0 1px var(--line-2)}
+.step.cur .n{background:var(--mark);border-color:var(--ink);color:var(--ink)}
+.step-sep{width:14px;height:1px;background:var(--line-2)}
+.ws{flex:1;display:grid;grid-template-columns:232px 476px 1fr;min-height:0}
+.rail{border-right:1px solid var(--line);padding:14px 12px;display:flex;flex-direction:column;gap:4px;background:rgba(250,247,239,.6)}
+.rail .new{justify-content:center;margin-bottom:10px;width:100%}
+.rail .item{padding:9px 10px;border-radius:8px;cursor:pointer}
+.rail .item:hover{background:var(--sheet)}
+.rail .item.on{background:var(--sheet);box-shadow:0 0 0 1px var(--line)}
+.rail .item b{display:block;font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rail .item span{font-size:11.5px;color:var(--ink-3)}
+.rail .group{font-size:11px;color:var(--ink-3);margin:12px 10px 4px;letter-spacing:.06em}
+
+.chat{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--sheet)}
+.msgs{flex:1;overflow:auto;padding:22px 22px 8px;display:flex;flex-direction:column;gap:14px}
+.msg{max-width:92%;font-size:14px;line-height:1.7}
+.msg.ai{align-self:flex-start}
+.msg.ai .who{font-size:11.5px;color:var(--ink-3);margin-bottom:3px;display:flex;align-items:center;gap:6px}
+.msg.me{align-self:flex-end;background:var(--ink);color:var(--paper);padding:9px 14px;border-radius:14px 14px 4px 14px}
+.toolrow{display:flex;flex-wrap:wrap;gap:6px;align-self:flex-start}
+.tool{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ok);background:#EAF4EE;border:1px solid #CFE5D7;border-radius:6px;padding:2px 8px}
+.tool svg{flex:none}
+.choices{align-self:stretch;border:1px solid var(--line-2);border-radius:12px;padding:14px;background:var(--sheet-2)}
+.choices .q{font-weight:500;margin-bottom:10px;font-size:13.5px}
+.choices .opts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.opt{height:38px;border:1px solid var(--line-2);border-radius:8px;background:var(--sheet);text-align:left;padding:0 12px;font-size:13px;display:flex;align-items:center;gap:8px}
+.opt::before{content:"";width:14px;height:14px;border-radius:50%;border:1.5px solid var(--ink-3);flex:none}
+.opt.sel{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.opt.sel::before{border-color:var(--ink);background:radial-gradient(var(--ink) 40%,transparent 45%)}
+.choices .other{margin-top:8px;font-size:12px;color:var(--ink-3)}
+.proposals{align-self:stretch;display:flex;flex-direction:column;gap:8px}
+.prop{border:1px solid var(--line-2);border-radius:12px;padding:12px 14px;background:var(--sheet);display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center}
+.prop.sel{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink);background:#FFFCF0}
+.prop h5{font-size:14px;font-weight:700}
+.prop .save{font-family:var(--mono);font-size:12px;font-weight:600;text-align:right}
+.prop .save small{display:block;font-family:var(--sans);font-weight:400;color:var(--ink-3)}
+.prop p{grid-column:1;font-size:12.5px;color:var(--ink-2)}
+.prop .chosen{font-size:11px;background:var(--ink);color:var(--paper);border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:2px}
+.wf-card{align-self:stretch;display:flex;align-items:center;gap:12px;border:1px dashed var(--ink-3);border-radius:12px;padding:12px 14px}
+.wf-card .ic{width:36px;height:36px;border-radius:8px;background:var(--mark);display:grid;place-items:center}
+.wf-card b{font-size:13.5px}
+.wf-card span{display:block;font-size:12px;color:var(--ink-3)}
+.typing{display:flex;gap:4px;align-items:center;color:var(--ink-3);font-size:12px}
+.typing i{width:5px;height:5px;border-radius:50%;background:var(--ink-3);animation:blink 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,100%{opacity:.25}50%{opacity:1}}
+.composer{border-top:1px solid var(--line);padding:12px 16px 14px}
+.hints{display:flex;gap:6px;margin-bottom:8px}
+.hints button{font-size:12px;color:var(--ink-2);border:1px solid var(--line);border-radius:999px;padding:2px 10px;background:var(--sheet-2)}
+.input{display:flex;align-items:flex-end;gap:8px;border:1px solid var(--line-2);border-radius:12px;padding:8px 8px 8px 14px;background:#fff}
+.input textarea{flex:1;border:0;outline:none;resize:none;height:44px;font-size:14px;line-height:1.6}
+.send{width:34px;height:34px;border-radius:8px;background:var(--ink);display:grid;place-items:center}
+.quota-line{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--ink-3)}
+
+.panel{display:flex;flex-direction:column;min-height:0;position:relative}
+.panel-head{height:50px;flex:none;display:flex;align-items:center;gap:6px;padding:0 16px;border-bottom:1px solid var(--line)}
+.tabs{display:flex;gap:2px;background:var(--sheet-2);border:1px solid var(--line);border-radius:9px;padding:3px}
+.tabs button{height:28px;padding:0 14px;border-radius:6px;font-size:13px;color:var(--ink-2)}
+.tabs button.on{background:var(--sheet);color:var(--ink);font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.tabs .count{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-left:4px}
+.panel-head .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.ver{height:32px;display:flex;align-items:center;gap:6px;padding:0 10px;border:1px solid var(--line-2);border-radius:8px;font-size:12.5px;background:var(--sheet)}
+.ver .mono{font-weight:600}
+.panel-body{flex:1;min-height:0;position:relative}
+
+/* 画布 */
+.canvas{position:absolute;inset:0;background-color:#FFFEFA;
+  background-image:linear-gradient(rgba(140,130,110,.09) 1px,transparent 1px),linear-gradient(90deg,rgba(140,130,110,.09) 1px,transparent 1px);
+  background-size:22px 22px}
+.canvas svg.flow{position:absolute;left:50%;top:22px;transform:translateX(-50%)}
+.flow text{font-family:var(--hand);font-size:17px;fill:#1E1E1E}
+.flow .lbl{font-size:14px;fill:#555}
+.legend{position:absolute;left:16px;bottom:16px;display:flex;gap:14px;align-items:center;background:var(--sheet);border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:12px;color:var(--ink-2);box-shadow:0 6px 18px -12px rgba(0,0,0,.3)}
+.legend .dot{width:10px;height:10px}
+.zoom{position:absolute;right:16px;bottom:16px;display:flex;align-items:center;background:var(--sheet);border:1px solid var(--line);border-radius:9px;overflow:hidden;font-size:12px;box-shadow:0 6px 18px -12px rgba(0,0,0,.3)}
+.zoom button{width:32px;height:32px}
+.zoom span{font-family:var(--mono);padding:0 6px;color:var(--ink-2)}
+.inspector{position:absolute;right:16px;top:16px;width:270px;padding:14px 16px}
+.inspector .k{font-size:11px;color:var(--ink-3);letter-spacing:.06em;margin-top:10px}
+.inspector .k:first-of-type{margin-top:0}
+.inspector h4{font-size:15px;margin:2px 0 6px}
+.inspector p{font-size:12.5px;color:var(--ink-2);line-height:1.65}
+.readonly{position:absolute;left:16px;top:16px;font-size:12px;color:var(--ink-3);background:rgba(255,253,248,.9);border:1px solid var(--line);border-radius:7px;padding:4px 10px}
+
+/* 导出菜单 */
+.export-wrap{position:relative}
+.menu{position:absolute;right:0;top:42px;width:400px;z-index:20;padding:8px;display:none}
+.menu.on{display:block;animation:pop .16s ease}
+@keyframes pop{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.mi{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;padding:10px;border-radius:9px;cursor:pointer}
+.mi:hover{background:var(--sheet-2)}
+.mi .ic{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--sheet-2);border:1px solid var(--line);font-family:var(--mono);font-size:11px;font-weight:600}
+.mi b{font-size:13.5px;display:block}
+.mi span{font-size:12px;color:var(--ink-3)}
+.mi .badge{font-size:11px;padding:1px 7px;border-radius:4px;background:var(--mark);font-weight:600}
+.mi.dis{opacity:.5;cursor:not-allowed}
+.mi.dis .badge{background:var(--line)}
+.mi.feat{background:#FFFCF0;box-shadow:inset 0 0 0 1px var(--line-2)}
+.tree{margin:2px 10px 8px 54px;font-family:var(--mono);font-size:11.5px;color:var(--ink-2);line-height:1.75;border-left:1px dashed var(--line-2);padding-left:10px}
+.tree em{color:var(--ink-3);font-style:normal}
+.grp{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--ink-2);padding:6px 10px 6px}
+.grp span{font-weight:400;font-size:11px;color:var(--ink-3);border:1px solid var(--line);border-radius:4px;padding:0 5px}
+.quick{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 4px 4px}
+.q{display:grid;grid-template-columns:34px 1fr;grid-template-rows:auto auto;column-gap:10px;align-items:center;text-align:left;padding:8px;border-radius:9px;border:1px solid var(--line)}
+.q:hover{background:var(--sheet-2);border-color:var(--line-2)}
+.q .ic{grid-row:1 / 3;width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--sheet-2);border:1px solid var(--line);font-family:var(--mono);font-size:10.5px;font-weight:600}
+.q b{font-size:13px;line-height:1.3}
+.q span:not(.ic){font-size:11.5px;color:var(--ink-3);line-height:1.3}
+.mi .badge.plug{background:var(--sheet-2);border:1px solid var(--line-2);font-weight:500;color:var(--ink-2)}
+.req{margin:0 10px 8px 54px;font-size:11.5px;color:#8A4A10;background:var(--hum-bg);border-radius:6px;padding:4px 8px}
+.menu hr{border:0;border-top:1px solid var(--line);margin:6px 4px}
+.menu .foot{font-size:11.5px;color:var(--ink-3);padding:6px 10px 4px}
+
+/* 工作画像 */
+.profile{position:absolute;inset:0;overflow:auto;padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;align-content:start;background:var(--paper)}
+.pcard{padding:18px 20px}
+.pcard.wide{grid-column:1 / -1}
+.pcard h3{display:flex;align-items:baseline;gap:8px;font-family:var(--serif);font-size:16px;font-weight:900;margin-bottom:12px}
+.pcard h3 span{font-family:var(--sans);font-weight:400;font-size:12px;color:var(--ink-3)}
+.pcard h3 .edit{margin-left:auto;font-family:var(--sans);font-size:12px;color:var(--ink-2);font-weight:500}
+.kv{display:grid;grid-template-columns:70px 1fr;gap:8px 12px;font-size:13px}
+.kv dt{color:var(--ink-3)}
+.kv dd{display:flex;flex-wrap:wrap;gap:6px}
+.pain{display:grid;grid-template-columns:28px 1fr 260px 90px;gap:14px;align-items:center;padding:12px 0;border-top:1px dashed var(--line)}
+.pain:first-of-type{border-top:0}
+.pain .rank{font-family:var(--serif);font-weight:900;font-size:22px;color:var(--ink-3)}
+.pain:first-of-type .rank{color:var(--ink)}
+.pain b{font-size:14px;font-weight:700}
+.pain .ev{font-size:12px;color:var(--ink-3);margin-top:2px}
+.scores{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.sc{font-size:11px;color:var(--ink-3)}
+.sc .v{font-family:var(--mono);font-size:13px;color:var(--ink);font-weight:600;display:block}
+.sc .pips{display:flex;gap:2px;margin-top:3px}
+.sc .pips i{flex:1;height:4px;border-radius:1px;background:var(--line)}
+.sc .pips i.on{background:var(--ink-2)}
+.prio{text-align:right}
+.prio .v{font-family:var(--mono);font-size:20px;font-weight:600}
+.prio small{display:block;font-size:11px;color:var(--ink-3)}
+.prio .wf{font-size:11px;color:var(--ok)}
+table.tasks{width:100%;border-collapse:collapse;font-size:13px}
+.tasks th{text-align:left;font-weight:500;color:var(--ink-3);font-size:12px;padding:0 0 8px;border-bottom:1px solid var(--line)}
+.tasks td{padding:9px 0;border-bottom:1px dashed var(--line)}
+.tasks tr:last-child td{border-bottom:0}
+.tasks .num{font-family:var(--mono);text-align:right}
+.tasks th.num{text-align:right}
+.hint-edit{font-size:12px;color:var(--ink-3);display:flex;align-items:center;gap:6px;margin-top:10px}
+
+/* ---------- 分享弹窗 ---------- */
+.modal-back{position:absolute;inset:0;background:rgba(28,27,24,.38);z-index:30;display:none;place-items:center;backdrop-filter:blur(1.5px)}
+.modal-back.on{display:grid;animation:fade .15s ease}
+.modal{width:560px;padding:26px 28px 22px}
+.modal h2{font-family:var(--serif);font-size:21px;font-weight:900}
+.modal .sub{font-size:13px;color:var(--ink-3);margin-top:2px}
+.modal .x{position:absolute;right:18px;top:16px;font-size:18px;color:var(--ink-3)}
+.mrow{margin-top:18px}
+.mrow>label{display:block;font-size:12.5px;font-weight:700;color:var(--ink-2);margin-bottom:8px}
+.seg{display:inline-flex;background:var(--sheet-2);border:1px solid var(--line);border-radius:9px;padding:3px}
+.seg button{height:30px;padding:0 14px;border-radius:6px;font-size:13px;color:var(--ink-2)}
+.seg button.on{background:var(--sheet);color:var(--ink);font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.vis{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.vis .o{border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;cursor:pointer}
+.vis .o b{display:block;font-size:13.5px}
+.vis .o span{font-size:12px;color:var(--ink-3)}
+.vis .o.sel{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink);background:#FFFCF0}
+.vis .o.dis{opacity:.55;cursor:not-allowed;background:var(--sheet-2)}
+.check{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:14px}
+.check i{width:16px;height:16px;border:1.5px solid var(--ink-3);border-radius:4px;display:inline-block}
+.linkbox{display:flex;gap:8px;margin-top:20px;padding:12px;border-radius:10px;background:var(--sheet-2);border:1px dashed var(--line-2)}
+.linkbox input{flex:1;height:36px;border:1px solid var(--line-2);border-radius:8px;padding:0 10px;font-family:var(--mono);font-size:12.5px;background:#fff;outline:none}
+.existing{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+.existing .h{font-size:12px;color:var(--ink-3);margin-bottom:6px}
+.ex-row{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;padding:7px 0;font-size:12.5px}
+.ex-row .st{font-size:11px;border-radius:4px;padding:1px 6px;background:#EAF4EE;color:var(--ok)}
+.ex-row .st.off{background:var(--line);color:var(--ink-3)}
+.ex-row .mono{color:var(--ink-3);font-size:11.5px}
+.ex-row button{font-size:12px;color:#B3261E}
+.modal .foot2{margin-top:14px;font-size:11.5px;color:var(--ink-3)}
+
+/* ---------- 分享页 ---------- */
+.share-top{height:60px;flex:none;display:flex;align-items:center;gap:16px;padding:0 24px;border-bottom:1px solid var(--line);background:rgba(255,253,248,.75)}
+.share-top .t{display:flex;flex-direction:column;line-height:1.3;padding-left:16px;border-left:1px solid var(--line)}
+.share-top .t b{font-family:var(--serif);font-size:16px;font-weight:900}
+.share-top .t span{font-size:12px;color:var(--ink-3)}
+.share-top .right{margin-left:auto;display:flex;gap:10px;align-items:center}
+.share-body{flex:1;display:grid;grid-template-columns:1fr 360px;min-height:0}
+.share-canvas{position:relative;border-right:1px solid var(--line)}
+.share-side{overflow:auto;padding:18px;display:flex;flex-direction:column;gap:14px}
+.share-side .card{padding:16px 18px}
+.share-side h3{font-family:var(--serif);font-size:15px;font-weight:900;margin-bottom:8px}
+.share-side p{font-size:13px;color:var(--ink-2)}
+.facts{display:grid;grid-template-columns:72px 1fr;gap:6px 10px;font-size:12.5px;margin-top:10px}
+.facts dt{color:var(--ink-3)}
+.stat3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.stat3 div{border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center;font-size:11.5px;color:var(--ink-3)}
+.stat3 b{display:block;font-family:var(--mono);font-size:18px;color:var(--ink)}
+.exp3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.exp3 button{height:34px;border:1px solid var(--line-2);border-radius:8px;font-size:12.5px;background:var(--sheet)}
+.exp3 button:hover{border-color:var(--ink-3)}
+.ro-banner{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);font-size:12px;color:var(--ink-2);background:var(--sheet);border:1px solid var(--line);border-radius:999px;padding:5px 14px;box-shadow:0 6px 18px -12px rgba(0,0,0,.3)}
+.share-list li{list-style:none;display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:9px 0;border-top:1px dashed var(--line);font-size:12.5px}
+.share-list li:first-child{border-top:0;padding-top:0}
+.share-list .s{font-size:11.5px;color:var(--ink-3)}
+.share-list .c{grid-row:1 / 3;grid-column:2;align-self:center;font-size:12px;border:1px solid var(--line-2);border-radius:6px;padding:2px 8px}
+</style>
+</head>
+<body>
+
+<nav class="review-bar" aria-label="切换界面">
+  <b>All-in-Flow · 界面原型</b>
+  <button data-go="login">① 登录</button>
+  <button data-go="home">② 首页</button>
+  <button data-go="canvas" class="on">③ 工作台 · 画布</button>
+  <button data-go="profile">④ 工作台 · 工作画像</button>
+  <button data-go="export">⑤ 导出菜单</button>
+  <button data-go="share">⑥ 分享弹窗</button>
+  <button data-go="sharepage">⑦ 分享页</button>
+  <span class="note">设计评审用静态原型 · 1440×900 画板按窗口缩放</span>
+</nav>
+
+<div class="stage"><div class="fit" id="fit"><div class="frame" id="frame">
+
+<!-- ================= ① 登录 ================= -->
+<section class="screen" id="s-login">
+  <div class="login">
+    <div class="login-left">
+      <div class="brand">
+        <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="#1C1B18" stroke-width="2"><rect x="2" y="3" width="9" height="7" rx="2"/><rect x="15" y="16" width="9" height="7" rx="2"/><path d="M6.5 10v5.5a3 3 0 0 0 3 3H15" stroke-linecap="round"/></svg>
+        All-in-Flow
+      </div>
+      <h1>把每天重复的工作，<br>画成<span class="mark">能运行</span>的流程图。</h1>
+      <p class="lead">和 AI 顾问聊聊你的日常工作。它会追问细节、找出最耗时的环节，并把能自动化的部分整理成工作流，导出后直接交给你的 Agent 执行。</p>
+      <div class="steps">
+        <div><b>聊</b>像和同事一样描述你的一天</div>
+        <div><b>挖</b>AI 追问出真正的痛点和耗时</div>
+        <div><b>画</b>生成一目了然的工作流</div>
+        <div><b>用</b>导出图片插入文档，或通过插件交给 Agent 执行</div>
+      </div>
+      <svg class="sketch" viewBox="0 0 640 260" fill="none" stroke="#1E1E1E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <defs><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="3"/><feDisplacementMap in="SourceGraphic" scale="3"/></filter></defs>
+        <g filter="url(#rough)">
+          <ellipse class="d1" cx="70" cy="70" rx="54" ry="28"/>
+          <path class="d2" d="M124 70 H196 M186 62 l10 8 -10 8"/>
+          <rect class="d2" x="200" y="38" width="150" height="64" rx="10" fill="#E7EEFC" stroke="#2F62D9"/>
+          <path class="d3" d="M350 70 H420 M410 62 l10 8 -10 8"/>
+          <polygon class="d3" points="490,22 560,70 490,118 420,70" fill="#FCEEDF" stroke="#D9701A"/>
+          <path class="d4" d="M490 118 V170 M482 160 l8 10 8 -10"/>
+          <rect class="d4" x="410" y="174" width="160" height="64" rx="10" fill="#F0E9FA" stroke="#7D4FC4"/>
+        </g>
+        <text x="46" y="76" font-family="ZCOOL KuaiLe" font-size="17" fill="#1E1E1E" stroke="none">开始</text>
+        <text x="228" y="76" font-family="ZCOOL KuaiLe" font-size="17" fill="#1E1E1E" stroke="none">导出本周订单</text>
+        <text x="458" y="76" font-family="ZCOOL KuaiLe" font-size="17" fill="#1E1E1E" stroke="none">有异常？</text>
+        <text x="446" y="212" font-family="ZCOOL KuaiLe" font-size="17" fill="#1E1E1E" stroke="none">生成销售周报</text>
+      </svg>
+    </div>
+    <div class="login-right">
+      <div class="card login-card">
+        <h2>登录</h2>
+        <div class="sub">使用 ERP 账号登录</div>
+        <div class="field"><label>ERP 账号</label><input placeholder="请输入 ERP 账号" value="zhangsan"></div>
+        <div class="field"><label>密码</label><input type="password" placeholder="请输入密码" value="••••••••"></div>
+        <button class="btn btn-ink">登录</button>
+        <div class="notice">访谈内容会发送给第三方大模型处理，请不要输入密码、客户隐私等敏感信息。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ② 首页 ================= -->
+<section class="screen" id="s-home">
+  <header class="topbar">
+    <div class="brand"><svg width="22" height="22" viewBox="0 0 26 26" fill="none" stroke="#1C1B18" stroke-width="2"><rect x="2" y="3" width="9" height="7" rx="2"/><rect x="15" y="16" width="9" height="7" rx="2"/><path d="M6.5 10v5.5a3 3 0 0 0 3 3H15" stroke-linecap="round"/></svg>All-in-Flow</div>
+    <div class="user"><div class="meter">今日 <i style="--v:16%"></i> 32 万 / 200 万</div><div class="avatar">张</div>张三</div>
+  </header>
+  <div class="home">
+    <div>
+      <div class="greet">下午好，张三<small>今天想聊聊哪件让你头疼的工作？</small></div>
+      <div class="card starter">
+        <textarea placeholder="比如：每周五下午都在做销售周报，要从 ERP 导数据、在 Excel 里透视，再挨个问销售异常单……"></textarea>
+        <div class="starter-foot">
+          <span style="font-size:12px;color:var(--ink-3);margin-right:4px">或者按岗位开始：</span>
+          <button class="chip">销售运营</button><button class="chip">财务</button><button class="chip">客服</button><button class="chip">人事</button><button class="chip">产品</button><button class="chip">开发</button>
+          <button class="btn btn-ink">开始访谈 →</button>
+        </div>
+      </div>
+
+      <div class="sec-title"><h3>最近的访谈</h3><span>共 5 个</span></div>
+      <div class="convs">
+        <div class="card conv">
+          <div class="thumb">
+            <svg width="210" height="92" viewBox="0 0 210 92" fill="none" stroke-width="1.6"><ellipse cx="22" cy="46" rx="16" ry="10" stroke="#1E1E1E"/><path d="M38 46h14" stroke="#1E1E1E"/><rect x="52" y="34" width="40" height="24" rx="4" fill="#E7EEFC" stroke="#2F62D9"/><path d="M92 46h12" stroke="#1E1E1E"/><polygon points="122,30 140,46 122,62 104,46" fill="#FCEEDF" stroke="#D9701A"/><path d="M140 46h12" stroke="#1E1E1E"/><rect x="152" y="34" width="40" height="24" rx="4" fill="#F0E9FA" stroke="#7D4FC4"/><path d="M122 62v14h-50v-18" stroke="#1E1E1E"/></svg>
+          </div>
+          <div class="body">
+            <h4>销售周报自动汇总</h4>
+            <div class="meta"><span>4 个痛点</span><span>工作流 v3</span><span>10 分钟前</span></div>
+            <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
+            <div class="prog-label">⑥ 已生成工作流</div>
+          </div>
+        </div>
+        <div class="card conv">
+          <div class="thumb empty">还没有工作流</div>
+          <div class="body">
+            <h4>月度对账梳理</h4>
+            <div class="meta"><span>2 个痛点</span><span>昨天</span></div>
+            <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div>
+            <div class="prog-label">③ 深挖痛点中</div>
+          </div>
+        </div>
+        <div class="card conv">
+          <div class="thumb empty">还没有工作流</div>
+          <div class="body">
+            <h4>客户催单回复</h4>
+            <div class="meta"><span>0 个痛点</span><span>3 天前</span></div>
+            <div class="prog"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></div>
+            <div class="prog-label">② 盘点工作中</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec-title"><h3>从常见场景开始</h3><span>AI 顾问会带着这个场景的背景向你提问</span></div>
+      <div class="tpls">
+        <div class="card tpl"><span class="role">通用</span><b>周报 / 日报汇总</b><span>从多个系统收集数据写报告</span></div>
+        <div class="card tpl"><span class="role">销售</span><b>订单异常跟进</b><span>发现异常、找人核对、跟进结果</span></div>
+        <div class="card tpl"><span class="role">财务</span><b>报销单据核对</b><span>票据、金额、审批信息逐一比对</span></div>
+        <div class="card tpl"><span class="role">人事</span><b>简历初筛</b><span>按岗位要求筛选并通知面试</span></div>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card side-card">
+        <h3>今日用量</h3>
+        <div class="big-num">32<small> 万 / 200 万 token</small></div>
+        <div class="bar"><i style="width:16%"></i></div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:8px">每天 0 点重置</div>
+      </div>
+      <div class="card side-card">
+        <h3>我的工作流</h3>
+        <ul class="wf-list">
+          <li><span class="dot det"></span><div><div class="n">销售周报自动汇总</div><div class="s">v3 · 每周省约 3 小时</div></div><button class="dl">导出</button></li>
+          <li><span class="dot llm"></span><div><div class="n">异常订单提醒</div><div class="s">v1 · 每周省约 1 小时</div></div><button class="dl">导出</button></li>
+        </ul>
+      </div>
+      <div class="card side-card">
+        <h3>我的分享</h3>
+        <ul class="share-list">
+          <li><span>销售周报自动汇总 · v3</span><span class="s">公司内 · 访问 23 次 · 30 天后过期</span><button class="c">复制链接</button></li>
+          <li><span>合同到期提醒 · 最新</span><span class="s">公司内 · 访问 8 次 · 永久</span><button class="c">复制链接</button></li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= ③④⑤ 工作台 ================= -->
+<section class="screen" id="s-ws">
+  <header class="topbar">
+    <div class="brand"><svg width="22" height="22" viewBox="0 0 26 26" fill="none" stroke="#1C1B18" stroke-width="2"><rect x="2" y="3" width="9" height="7" rx="2"/><rect x="15" y="16" width="9" height="7" rx="2"/><path d="M6.5 10v5.5a3 3 0 0 0 3 3H15" stroke-linecap="round"/></svg>All-in-Flow</div>
+    <nav class="stepper" aria-label="访谈阶段">
+      <span class="step done"><span class="n">✓</span>了解角色</span><span class="step-sep"></span>
+      <span class="step done"><span class="n">✓</span>盘点工作</span><span class="step-sep"></span>
+      <span class="step done"><span class="n">✓</span>深挖痛点</span><span class="step-sep"></span>
+      <span class="step done"><span class="n">✓</span>量化排序</span><span class="step-sep"></span>
+      <span class="step done"><span class="n">✓</span>提出方案</span><span class="step-sep"></span>
+      <span class="step cur"><span class="n">6</span>生成工作流</span>
+    </nav>
+    <div class="user"><div class="meter">今日 <i style="--v:16%"></i> 32 万 / 200 万</div><div class="avatar">张</div>张三</div>
+  </header>
+
+  <div class="ws">
+    <!-- 会话栏 -->
+    <aside class="rail">
+      <button class="btn btn-ink new">＋ 新建访谈</button>
+      <div class="group">今天</div>
+      <div class="item on"><b>销售周报自动汇总</b><span>⑥ 已生成 · v3</span></div>
+      <div class="group">更早</div>
+      <div class="item"><b>月度对账梳理</b><span>③ 深挖痛点</span></div>
+      <div class="item"><b>客户催单回复</b><span>② 盘点工作</span></div>
+      <div class="item"><b>招聘简历初筛</b><span>⑤ 提出方案</span></div>
+      <div class="item"><b>合同到期提醒</b><span>⑥ 已生成 · v1</span></div>
+    </aside>
+
+    <!-- 对话 -->
+    <section class="chat">
+      <div class="msgs">
+        <div class="msg ai"><div class="who">AI 顾问</div>带我过一遍你上周五下午做的事吧，从打开电脑的第一步开始。</div>
+        <div class="msg me">基本都在做周报。先从 ERP 导出本周订单，然后在 Excel 里透视，再把异常单挑出来，挨个在钉钉上问销售。</div>
+        <div class="toolrow">
+          <span class="tool"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 6.5l2.5 2.5L10 3.5"/></svg>记录工作：销售周报</span>
+          <span class="tool"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 6.5l2.5 2.5L10 3.5"/></svg>记录痛点：手工导出并透视订单</span>
+        </div>
+        <div class="msg ai"><div class="who">AI 顾问</div>从导出数据到周报发出去，一般要花多长时间？</div>
+        <div class="choices">
+          <div class="q">做一次周报大概要多久？</div>
+          <div class="opts">
+            <button class="opt">1 小时以内</button><button class="opt">1～2 小时</button>
+            <button class="opt sel">半天左右</button><button class="opt">更久</button>
+          </div>
+          <div class="other">也可以直接输入其他回答</div>
+        </div>
+        <div class="msg me">半天左右</div>
+        <div class="msg ai"><div class="who">AI 顾问</div>根据我们聊到的 4 个痛点，我整理了 3 个可以先做的方案：</div>
+        <div class="proposals">
+          <div class="prop sel"><h5>销售周报自动汇总<span class="chosen">已选</span></h5><div class="save">≈ 3 小时<small>每周节省</small></div><p>自动拉取订单、生成透视和结论，异常单交给你确认</p></div>
+          <div class="prop"><h5>异常订单自动提醒</h5><div class="save">≈ 1 小时<small>每周节省</small></div><p>发现异常单后直接在钉钉上提醒对应的销售</p></div>
+          <div class="prop"><h5>催单消息归集</h5><div class="save">≈ 40 分钟<small>每周节省</small></div><p>把多个群里的催单消息汇总成一张待办清单</p></div>
+        </div>
+        <div class="wf-card"><div class="ic"><svg width="18" height="18" viewBox="0 0 26 26" fill="none" stroke="#1C1B18" stroke-width="2.4"><rect x="2" y="3" width="9" height="7" rx="2"/><rect x="15" y="16" width="9" height="7" rx="2"/><path d="M6.5 10v5.5a3 3 0 0 0 3 3H15"/></svg></div><div><b>已更新工作流 · v3</b><span>按你的要求，把"发送到钉钉群"改成了先给你预览</span></div></div>
+        <div class="typing"><i></i><i></i><i></i>&nbsp;AI 顾问正在思考</div>
+      </div>
+      <div class="composer">
+        <div class="hints"><button>直接给我方案</button><button>换一个痛点</button><button>这一步不对</button></div>
+        <div class="input"><textarea placeholder="回答问题，或告诉 AI 要怎么修改工作流…"></textarea><button class="send" aria-label="发送"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#F3EFE5" stroke-width="2" stroke-linecap="round"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg></button></div>
+        <div class="quota-line"><span>Enter 发送 · Shift+Enter 换行</span><span>本会话已用 18 轮</span></div>
+      </div>
+    </section>
+
+    <!-- 右侧面板 -->
+    <section class="panel">
+      <div class="panel-head">
+        <div class="tabs"><button data-tab="canvas" class="on">画布</button><button data-tab="profile">工作画像<span class="count">4</span></button></div>
+        <div class="right">
+          <div class="ver">版本 <span class="mono">v3</span> <span style="color:var(--ink-3)">· 2 分钟前</span> ▾</div>
+          <button class="btn btn-line" id="shareBtn">分享</button>
+          <div class="export-wrap">
+            <button class="btn btn-ink" id="exportBtn">导出 ▾</button>
+            <div class="card menu" id="menu">
+              <div class="grp">图片与图形<span>内置</span></div>
+              <div class="quick">
+                <button class="q"><span class="ic">PNG</span><b>PNG 图片</b><span>插入文档、汇报</span></button>
+                <button class="q"><span class="ic">SVG</span><b>SVG 矢量图</b><span>无损缩放</span></button>
+                <button class="q"><span class="ic">MMD</span><b>Mermaid</b><span>粘贴到文档工具</span></button>
+                <button class="q"><span class="ic">EX</span><b>Excalidraw</b><span>继续自由编辑</span></button>
+              </div>
+              <hr>
+              <div class="grp">导出到平台<span>插件</span></div>
+              <div class="mi feat"><div class="ic">SK</div><div><b>Agent Skill（.zip）</b><span>放进 Claude Code / Pi / Codex 的 skills 目录</span></div><span class="badge plug">插件 · v1.0</span></div>
+              <div class="tree">weekly-sales-report/<br>├─ SKILL.md <em>步骤 · 前置条件 · 执行约定</em><br>└─ references/<br>&nbsp;&nbsp;&nbsp;├─ workflow.mmd<br>&nbsp;&nbsp;&nbsp;└─ workflow.json</div>
+              <div class="req">运行前需要：ERP 订单接口（ERP_TOKEN）、钉钉机器人 Webhook</div>
+              <div class="mi dis"><div class="ic">n8n</div><div><b>n8n 工作流</b><span>导入 n8n 后运行</span></div><span class="badge">二期</span></div>
+              <div class="foot">插件由管理员启用 · 导出前会检查哪些节点无法转换</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel-body">
+        <!-- 画布 -->
+        <div class="canvas" id="canvasView">
+          <span class="readonly">只读 · 通过对话修改</span>
+          <svg class="flow" width="560" height="740" viewBox="0 0 560 740" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <defs>
+              <filter id="r2"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="7"/><feDisplacementMap in="SourceGraphic" scale="2.6"/></filter>
+              <pattern id="hDet" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-40)"><rect width="8" height="8" fill="#F3F6FE"/><line x1="0" y1="0" x2="0" y2="8" stroke="#A9BFF0" stroke-width="2"/></pattern>
+              <pattern id="hLlm" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-40)"><rect width="8" height="8" fill="#F8F4FD"/><line x1="0" y1="0" x2="0" y2="8" stroke="#CDB6EE" stroke-width="2"/></pattern>
+              <pattern id="hHum" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-40)"><rect width="8" height="8" fill="#FEF7EF"/><line x1="0" y1="0" x2="0" y2="8" stroke="#F2C08F" stroke-width="2"/></pattern>
+              <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M1 1 L9 5 L1 9" stroke="#1E1E1E" stroke-width="1.6" fill="none"/></marker>
+            </defs>
+            <g filter="url(#r2)" stroke="#1E1E1E" stroke-width="1.8">
+              <!-- 开始 -->
+              <ellipse cx="200" cy="40" rx="62" ry="26"/>
+              <path d="M200 66 V104" marker-end="url(#ah)"/>
+              <!-- 拉取订单 -->
+              <rect x="110" y="108" width="180" height="62" rx="10" fill="url(#hDet)" stroke="#2F62D9"/>
+              <path d="M200 170 V206" marker-end="url(#ah)"/>
+              <!-- 生成透视 -->
+              <rect x="110" y="210" width="180" height="62" rx="10" fill="url(#hDet)" stroke="#2F62D9"/>
+              <path d="M200 272 V302" marker-end="url(#ah)"/>
+              <!-- 判断 -->
+              <polygon points="200,306 290,356 200,406 110,356" fill="#FFFEFA"/>
+              <path d="M290 356 H372" marker-end="url(#ah)"/>
+              <path d="M200 406 V470" marker-end="url(#ah)"/>
+              <!-- 人工核对 -->
+              <rect x="376" y="326" width="170" height="62" rx="10" fill="url(#hHum)" stroke="#D9701A"/>
+              <path d="M461 388 V500 H294" marker-end="url(#ah)"/>
+              <!-- 生成周报 -->
+              <rect x="110" y="474" width="180" height="62" rx="10" fill="url(#hLlm)" stroke="#7D4FC4" stroke-width="2.6"/>
+              <path d="M200 536 V570" marker-end="url(#ah)"/>
+              <!-- 预览确认 -->
+              <rect x="110" y="574" width="180" height="62" rx="10" fill="url(#hHum)" stroke="#D9701A"/>
+              <path d="M200 636 V660" marker-end="url(#ah)"/>
+              <!-- 发送 / 结束 -->
+              <rect x="110" y="664" width="180" height="50" rx="10" fill="url(#hDet)" stroke="#2F62D9"/>
+            </g>
+            <text x="168" y="46">开始</text>
+            <text x="140" y="145">拉取本周订单</text>
+            <text x="140" y="247">生成透视汇总</text>
+            <text x="150" y="362">有异常单？</text>
+            <text class="lbl" x="312" y="346">有</text>
+            <text class="lbl" x="210" y="444">没有</text>
+            <text x="406" y="363">人工核对异常</text>
+            <text x="140" y="511">撰写周报结论</text>
+            <text x="140" y="611">预览并确认</text>
+            <text x="132" y="695">发送到钉钉群</text>
+          </svg>
+          <div class="card inspector">
+            <div class="k">选中节点</div>
+            <h4>撰写周报结论</h4>
+            <div style="display:flex;gap:6px;margin-bottom:6px"><span class="tag"><span class="dot llm"></span>AI 执行</span></div>
+            <div class="k">输入</div>
+            <p>透视汇总表、异常核对结果</p>
+            <div class="k">执行说明</div>
+            <p>按周报模板汇总销售额、环比、Top 5 客户，并写出三条结论和一条风险提示。</p>
+            <div class="k">来自痛点</div>
+            <p>#1 手工导出并透视订单　#2 周报结论要反复改</p>
+          </div>
+          <div class="legend"><span><span class="dot det"></span> 脚本执行</span><span><span class="dot llm"></span> AI 执行</span><span><span class="dot hum"></span> 需要人工</span></div>
+          <div class="zoom"><button>−</button><span>100%</span><button>＋</button><button title="适应画布">⤢</button></div>
+        </div>
+
+        <!-- 工作画像 -->
+        <div class="profile" id="profileView" style="display:none">
+          <div class="card pcard">
+            <h3>基本信息<button class="edit">编辑</button></h3>
+            <dl class="kv">
+              <dt>岗位</dt><dd>销售运营</dd>
+              <dt>团队</dt><dd>华南销售部 · 8 人</dd>
+              <dt>常用系统</dt><dd><span class="tag">ERP</span><span class="tag">Excel</span><span class="tag">钉钉</span><span class="tag">企业微信</span></dd>
+              <dt>一句话</dt><dd style="color:var(--ink-2)">负责销售数据报表和订单跟进，一半时间花在整理数据上。</dd>
+            </dl>
+          </div>
+          <div class="card pcard">
+            <h3>工作清单<span>4 项</span><button class="edit">＋ 添加</button></h3>
+            <table class="tasks">
+              <thead><tr><th>工作</th><th>频率</th><th class="num">单次耗时</th></tr></thead>
+              <tbody>
+                <tr><td>销售周报</td><td>每周</td><td class="num">3.5 h</td></tr>
+                <tr><td>订单跟进</td><td>每天</td><td class="num">1 h</td></tr>
+                <tr><td>客户催单回复</td><td>每天</td><td class="num">30 min</td></tr>
+                <tr><td>月度对账</td><td>每月</td><td class="num">4 h</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card pcard wide">
+            <h3>痛点<span>按 频率 × 耗时 × 痛苦程度 × 可自动化程度 排序</span><button class="edit">＋ 添加</button></h3>
+            <div class="pain">
+              <div class="rank">1</div>
+              <div><b>手工导出并透视订单数据</b><div class="ev">"每次都要重新设一遍透视表，字段还经常变"</div></div>
+              <div class="scores">
+                <div class="sc">频率<span class="v">每周</span></div>
+                <div class="sc">耗时<span class="v">2.5h</span></div>
+                <div class="sc">痛苦<div class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div></div>
+                <div class="sc">可自动化<div class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div></div>
+              </div>
+              <div class="prio"><span class="v">92</span><small>优先级</small><span class="wf">✓ 已纳入 v3</span></div>
+            </div>
+            <div class="pain">
+              <div class="rank">2</div>
+              <div><b>挨个找销售核对异常单</b><div class="ev">"一个个私聊，回复慢的要催好几次"</div></div>
+              <div class="scores">
+                <div class="sc">频率<span class="v">每周</span></div>
+                <div class="sc">耗时<span class="v">1h</span></div>
+                <div class="sc">痛苦<div class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div></div>
+                <div class="sc">可自动化<div class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div></div>
+              </div>
+              <div class="prio"><span class="v">64</span><small>优先级</small><span class="wf">✓ 已纳入 v3</span></div>
+            </div>
+            <div class="pain">
+              <div class="rank">3</div>
+              <div><b>催单消息分散在多个群里</b><div class="ev">"经常漏看，客户第二天又来问"</div></div>
+              <div class="scores">
+                <div class="sc">频率<span class="v">每天</span></div>
+                <div class="sc">耗时<span class="v">20min</span></div>
+                <div class="sc">痛苦<div class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div></div>
+                <div class="sc">可自动化<div class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div></div>
+              </div>
+              <div class="prio"><span class="v">51</span><small>优先级</small></div>
+            </div>
+            <div class="pain">
+              <div class="rank">4</div>
+              <div><b>月底对账反复改表</b><div class="ev">"财务口径一变，整张表都要重做"</div></div>
+              <div class="scores">
+                <div class="sc">频率<span class="v">每月</span></div>
+                <div class="sc">耗时<span class="v">4h</span></div>
+                <div class="sc">痛苦<div class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div></div>
+                <div class="sc">可自动化<div class="pips"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div></div>
+              </div>
+              <div class="prio"><span class="v">38</span><small>优先级</small></div>
+            </div>
+            <div class="hint-edit">✎ 任何一项都可以直接修改，修改后 AI 顾问会在下一轮对话中知道</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-back" id="shareModal">
+    <div class="card modal" style="position:relative">
+      <button class="x" aria-label="关闭">✕</button>
+      <h2>分享工作流</h2>
+      <div class="sub">销售周报自动汇总 · 同事打开链接即可查看流程图和每一步的说明</div>
+      <div class="mrow"><label>分享哪个版本</label>
+        <div class="seg"><button class="on">锁定 v3</button><button>始终显示最新版本</button></div>
+      </div>
+      <div class="mrow"><label>谁能看</label>
+        <div class="vis">
+          <div class="o sel"><b>公司内</b><span>需要用 ERP 账号登录后查看</span></div>
+          <div class="o dis"><b>任何拿到链接的人</b><span>管理员未开启公开分享</span></div>
+        </div>
+      </div>
+      <div class="mrow"><label>有效期</label>
+        <div class="seg"><button>7 天</button><button class="on">30 天</button><button>永久</button></div>
+      </div>
+      <div class="check"><i></i>同时分享来源痛点摘要（默认不分享）</div>
+      <div class="linkbox"><input readonly value="https://flow.tourmind.cn/s/k3Jd9Q2xV7mPa1Lr8sT0bZ"><button class="btn btn-ink">复制链接</button></div>
+      <div class="existing">
+        <div class="h">这个工作流已有的分享</div>
+        <div class="ex-row"><span class="st">生效中</span><span>v3 · 公司内 · 30 天后过期</span><span class="mono">访问 23 次</span><button>撤销</button></div>
+        <div class="ex-row"><span class="st off">已过期</span><span>v1 · 公司内 · 7 天</span><span class="mono">访问 5 次</span><span></span></div>
+      </div>
+      <div class="foot2">对话记录不会被分享。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ⑦ 分享页 ================= -->
+<section class="screen" id="s-sharepage">
+  <header class="share-top">
+    <div class="brand"><svg width="22" height="22" viewBox="0 0 26 26" fill="none" stroke="#1C1B18" stroke-width="2"><rect x="2" y="3" width="9" height="7" rx="2"/><rect x="15" y="16" width="9" height="7" rx="2"/><path d="M6.5 10v5.5a3 3 0 0 0 3 3H15" stroke-linecap="round"/></svg>All-in-Flow</div>
+    <div class="t"><b>销售周报自动汇总</b><span>张三 分享 · v3 · 2 小时前更新 · 公司内可见</span></div>
+    <div class="right">
+      <button class="btn btn-ink">复制到我的工作台</button>
+      <div class="avatar" style="background:#7D4FC4">李</div>
+    </div>
+  </header>
+  <div class="share-body">
+    <div class="share-canvas">
+      <div class="canvas" id="shareCanvas"></div>
+      <div class="legend"><span><span class="dot det"></span> 脚本执行</span><span><span class="dot llm"></span> AI 执行</span><span><span class="dot hum"></span> 需要人工</span></div>
+      <div class="zoom"><button>−</button><span>100%</span><button>＋</button><button title="适应画布">⤢</button></div>
+      <div class="ro-banner">只读分享 · 点击节点查看说明</div>
+    </div>
+    <aside class="share-side">
+      <div class="card">
+        <h3>关于这个工作流</h3>
+        <p>每周汇总 ERP 订单数据并生成销售周报，异常订单交给人工确认后再发出。</p>
+        <dl class="facts">
+          <dt>触发方式</dt><dd>每周五 17:00</dd>
+          <dt>前置条件</dt><dd>ERP 订单接口、钉钉机器人</dd>
+          <dt>预计节省</dt><dd>每周约 3 小时</dd>
+        </dl>
+        <div class="stat3"><div><b>4</b>脚本</div><div><b>1</b>AI</div><div><b>2</b>人工</div></div>
+      </div>
+      <div class="card">
+        <h3>撰写周报结论</h3>
+        <div style="margin-bottom:8px"><span class="tag"><span class="dot llm"></span>AI 执行</span></div>
+        <p>按周报模板汇总销售额、环比、Top 5 客户，并写出三条结论和一条风险提示。</p>
+      </div>
+      <div class="card">
+        <h3>导出</h3>
+        <div class="exp3"><button>PNG</button><button>SVG</button><button>Mermaid</button></div>
+        <p style="font-size:12px;color:var(--ink-3);margin-top:8px">需要导出为 Skill 等格式时，请先复制到自己的工作台。</p>
+      </div>
+    </aside>
+  </div>
+</section>
+
+</div></div></div>
+
+<script>
+const frame = document.getElementById('frame');
+const fit = document.getElementById('fit');
+function rescale(){
+  const s = Math.min(1, (window.innerWidth - 32) / 1440);
+  frame.style.transform = `scale(${s})`;
+  fit.style.width = 1440 * s + 'px';
+  fit.style.height = 900 * s + 'px';
+}
+window.addEventListener('resize', rescale); rescale();
+
+const screens = { login:'s-login', home:'s-home', canvas:'s-ws', profile:'s-ws', export:'s-ws', share:'s-ws', sharepage:'s-sharepage' };
+const shareModal = document.getElementById('shareModal');
+document.getElementById('shareCanvas').innerHTML = document.querySelector('#canvasView svg.flow').outerHTML
+  .replace(/id="([\w-]+)"/g, 'id="$1-share"').replace(/url\(#([\w-]+)\)/g, 'url(#$1-share)');
+const menu = document.getElementById('menu');
+function setTab(t){
+  document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
+  document.getElementById('canvasView').style.display = t==='canvas' ? '' : 'none';
+  document.getElementById('profileView').style.display = t==='profile' ? '' : 'none';
+}
+function go(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on', s.id===screens[name]));
+  document.querySelectorAll('[data-go]').forEach(b=>b.classList.toggle('on', b.dataset.go===name));
+  setTab(name==='profile' ? 'profile' : 'canvas');
+  menu.classList.toggle('on', name==='export');
+  shareModal.classList.toggle('on', name==='share');
+  try { localStorage.setItem('aif-mock', name); } catch(e) {}
+}
+document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{ setTab(b.dataset.tab); menu.classList.remove('on'); });
+document.getElementById('shareBtn').onclick=()=>{ menu.classList.remove('on'); shareModal.classList.add('on'); };
+shareModal.onclick=(e)=>{ if(e.target===shareModal || e.target.classList.contains('x')) shareModal.classList.remove('on'); };
+document.getElementById('exportBtn').onclick=(e)=>{ e.stopPropagation(); menu.classList.toggle('on'); };
+let start = 'canvas'; try { start = localStorage.getItem('aif-mock') || 'canvas'; } catch(e) {}
+go(start);
+</script>
+</body>
+</html>

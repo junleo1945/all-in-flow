@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791550493783,
+      "tag": "0000_famous_phil_sheldon",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791602075550,
+      "tag": "0001_mute_wonder_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791671384170,
+      "tag": "0002_conversation_pinned",
+      "breakpoints": true
+    }
+  ]
+}

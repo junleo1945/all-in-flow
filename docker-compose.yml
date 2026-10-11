@@ -1,0 +1,80 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aif}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aif}
+      POSTGRES_DB: ${POSTGRES_DB:-all_in_flow}
+    # 宿主机端口可通过 POSTGRES_PORT 修改；5432 常被其他本地数据库占用，默认用 5433
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aif} -d ${POSTGRES_DB:-all_in_flow}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    # 应用配置：可以写在 .env 中，或在执行 docker compose 时通过环境变量传入（这里显式列出，Compose 才会传递）
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-aif}:${POSTGRES_PASSWORD:-aif}@postgres:5432/${POSTGRES_DB:-all_in_flow}
+      PORT: "3000"
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      MODELS_JSON_PATH: /app/config/models.json
+      # 图片识别（千问）：配置 VISION_MODEL_ID 才开启；地址与密钥默认复用 DeepSeek 的代理
+      VISION_MODEL_ID: ${VISION_MODEL_ID:-}
+      VISION_BASE_URL: ${VISION_BASE_URL:-}
+      VISION_API_KEY: ${VISION_API_KEY:-}
+      VISION_THINKING: ${VISION_THINKING:-false}
+      ATTACHMENT_DIR: /data/uploads
+      ATTACHMENT_MAX_BYTES: ${ATTACHMENT_MAX_BYTES:-10485760}
+      ATTACHMENT_MAX_PER_MESSAGE: ${ATTACHMENT_MAX_PER_MESSAGE:-4}
+      ATTACHMENT_DAILY_LIMIT_PER_USER: ${ATTACHMENT_DAILY_LIMIT_PER_USER:-50}
+      AGENT_MODEL: ${AGENT_MODEL:-deepseek/deepseek-flash}
+      WORKFLOW_MODEL: ${WORKFLOW_MODEL:-deepseek/deepseek-v4-pro}
+      ERP_BASE_URL: ${ERP_BASE_URL:-https://erp.tourmind.cn}
+      SSO_APP_CODE: ${SSO_APP_CODE:-}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      SESSION_VERIFY_INTERVAL_SECONDS: ${SESSION_VERIFY_INTERVAL_SECONDS:-300}
+      ADMIN_USERNAMES: ${ADMIN_USERNAMES:-}
+      EXPORT_PLUGINS: ${EXPORT_PLUGINS:-skill}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      SHARE_PUBLIC_ENABLED: ${SHARE_PUBLIC_ENABLED:-false}
+      DAILY_TOKEN_QUOTA_PER_USER: ${DAILY_TOKEN_QUOTA_PER_USER:-2000000}
+      DAILY_COST_LIMIT_USD: ${DAILY_COST_LIMIT_USD:-20}
+      MAX_TURNS_PER_CONVERSATION: ${MAX_TURNS_PER_CONVERSATION:-80}
+    volumes:
+      # 自定义模型清单（只读挂载），修改后重启服务端生效
+      - ./config/models.json:/app/config/models.json:ro
+      # 用户上传的图片（按会话分目录）
+      - uploads:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "3000"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "${WEB_PORT:-8080}:80"
+
+volumes:
+  pgdata:
+  uploads:

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+coverage/
+.dev-uploads/
+.claude/
+scripts/n8n-mcp-headers.sh

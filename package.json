@@ -1,0 +1,16 @@
+{
+  "name": "all-in-flow",
+  "private": true,
+  "packageManager": "pnpm@10.27.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "bash scripts/dev.sh",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @aif/server db:generate",
+    "test:db": "DATABASE_URL=postgres://aif:aif@localhost:5433/all_in_flow_test pnpm -r test",
+    "db:test:create": "docker compose exec -T postgres psql -U aif -d all_in_flow -c \"CREATE DATABASE all_in_flow_test;\""
+  }
+}

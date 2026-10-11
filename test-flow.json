@@ -1,0 +1,645 @@
+{
+  "name": "华南区异常订单核对流水线",
+  "nodes": [
+    {
+      "id": "e42d0c0b-ca17-4efb-8a72-88591dda2ccf",
+      "name": "触发器（定时触发）",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 17 * * 5"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f1055297-f0fb-42e7-8e8f-a7f1f0546d4b",
+      "name": "上传/读取ERP导出订单",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "19e78f4d-04c0-4ffd-8fa5-ad4f805d9819",
+      "name": "便签：上传/读取ERP导出订单",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        480,
+        80
+      ],
+      "parameters": {
+        "content": "上传/读取ERP导出订单\n\n人工确认，导入后请替换为 Wait（表单）节点。\n\n请用户从ERP订单管理模块点击固定导出按钮，导出当日日期加订单列表的Excel文件并上传；若已提前导出，直接提供文件。",
+        "height": 200,
+        "width": 280
+      }
+    },
+    {
+      "id": "f205542a-f1fb-447a-8b8f-a338f1546ede",
+      "name": "字段映射并生成标准透视表",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "16e78a94-01c0-4b44-80a5-aee27d5d9360",
+      "name": "便签：字段映射并生成标准透视表",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        720,
+        80
+      ],
+      "parameters": {
+        "content": "字段映射并生成标准透视表\n\n数据整理（模板是描述而非字段拼接，导入后请改写为 Code 或 Set 节点）：\n读取 {{n1.order_file_ready}}，按可配置映射表对每列做模糊匹配，命中则重命名为标准字段，未命中的列列入待确认例外清单；按标准字段顺序重建表格，生成标准透视表。\n\n读取ERP导出Excel，按顾问配置的可配置映射表，对列名做名称与位置无关的模糊内容匹配（如订单金额匹配金额小计），把每列对应到固定标准字段（订单号、客户名称、销售编号、订单金额、开票金额、下单日期、发货日期、发货状态、退款标记等），按标准字段顺序生成标准化透视表。遇到映射表未覆盖的列，记录为待确认例外项。",
+        "height": 200,
+        "width": 280
+      }
+    },
+    {
+      "id": "f30555bd-f2fb-460d-8c8f-a4cbf2547071",
+      "name": "调用ERP核对订单字段与销售编号",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "17e78c27-02c0-4cd7-81a5-b0757e5d94f3",
+      "name": "便签：调用ERP核对订单字段与销售编号",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        960,
+        80
+      ],
+      "parameters": {
+        "content": "调用ERP核对订单字段与销售编号\n\n集成操作：erp.listOrders\n\n以导出日期为起止时间，从ERP查询当日订单，核对标准透视表中的订单号、销售编号与ERP是否一致，并确认所有销售编号是否都能对应到销售名单。",
+        "height": 200,
+        "width": 280
+      }
+    },
+    {
+      "id": "ec054ab8-ebfb-4b08-818f-acaaf3547204",
+      "name": "是否存在待确认例外项",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "24b16a22-e757-4ff2-854a-1b803490809e",
+              "leftValue": "={{ $('字段映射并生成标准透视表').item.json.unmapped_columns }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ed054c4b-ecfb-4c9b-828f-ae3df4547397",
+      "name": "人工确认例外项与销售编号",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "15e78901-00c0-49b1-8ba5-a703845d9e65",
+      "name": "便签：人工确认例外项与销售编号",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        80
+      ],
+      "parameters": {
+        "content": "人工确认例外项与销售编号\n\n人工确认，导入后请替换为 Wait（表单）节点。\n\n列出映射表未覆盖的列以及ERP中无法对应销售名单的销售编号，请用户人工判断应归属的标准字段与责任人，并确认该异常订单是否纳入清单。",
+        "height": 200,
+        "width": 280
+      }
+    },
+    {
+      "id": "ee054dde-edfb-4e2e-8f8f-a984f554752a",
+      "name": "按规则筛选三类异常订单",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "12e78448-fdc0-44f8-8ca5-a896815d99ac",
+      "name": "便签：按规则筛选三类异常订单",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        80
+      ],
+      "parameters": {
+        "content": "按规则筛选三类异常订单\n\n数据整理（模板是描述而非字段拼接，导入后请改写为 Code 或 Set 节点）：\n对 {{n2.standard_pivot}} 逐行判断金额异常、超期未发货、退款未同步，保留异常类型标签，合并 {{n5.manual_decision}}，输出异常订单列表及所属销售编号。\n\n在标准透视表基础上，按固定规则筛选异常订单：金额异常为订单金额与开票金额不一致；超期未发货为下单后超过3天且未发货；退款未同步为ERP中无退款标记状态。将筛选结果与人工确认结论合并。",
+        "height": 200,
+        "width": 280
+      }
+    },
+    {
+      "id": "e97c4852-5993-4fa2-881c-0a702b54acae",
+      "name": "按销售编号分组生成清单（准备数据）",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1920,
+        300
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e97c4852-5993-4fa2-881c-0a702b54acae",
+              "name": "__items",
+              "value": "={{ ($('按规则筛选三类异常订单').item.json.anomaly_orders ?? []) }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "cf6d4a40-0c6f-4b10-8c25-3d4663062f6c",
+      "name": "按销售编号分组生成清单（有数据？）",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2160,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cf6d4a40-0c6f-4b10-8c25-3d4663062f6c",
+              "leftValue": "={{ $json.__items }}",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "280c6515-279e-4f05-852c-63a7f65bba21",
+      "name": "按销售编号分组生成清单（拆分）",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        300
+      ],
+      "parameters": {
+        "fieldToSplitOut": "__items",
+        "include": "noOtherFields",
+        "options": {
+          "destinationFieldName": "sales_group"
+        }
+      }
+    },
+    {
+      "id": "2ae13ac7-88c6-4437-85f1-cce165473d83",
+      "name": "按销售编号分组生成清单",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2640,
+        300
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "690f09db-6904-4a2b-8671-8645784ab607",
+      "name": "按销售编号聚合异常订单",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2880,
+        560
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "81dda5a9-6cb6-4659-8788-5523186781bd",
+      "name": "便签：按销售编号聚合异常订单",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2880,
+        340
+      ],
+      "parameters": {
+        "content": "按销售编号聚合异常订单\n\n数据整理（模板是描述而非字段拼接，导入后请改写为 Code 或 Set 节点）：\n对当前销售 {{sales_group.销售编号}} 下的异常订单，按异常类型分组，生成清单条目。\n\n将当前销售编号下的异常订单聚合，按异常类型分类整理成清单：订单号、客户名称、异常类型、异常说明、建议核对事项。",
+        "height": 200,
+        "width": 280
+      }
+    },
+    {
+      "id": "6a0f0b6e-6a04-4bbe-8371-818c794ab79a",
+      "name": "生成该销售清单文件",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        560
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "7edda0f0-69b6-41a0-8888-56b615677d04",
+      "name": "便签：生成该销售清单文件",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        340
+      ],
+      "parameters": {
+        "content": "生成该销售清单文件\n\n数据整理（模板是描述而非字段拼接，导入后请改写为 Code 或 Set 节点）：\n把 {{b1.sales_anomaly_list}} 写入文件，文件名格式为异常待核对清单加销售编号加导出日期。\n\n将该销售的异常清单写入独立文件，文件名包含销售编号与导出日期，便于用户手动分发。",
+        "height": 200,
+        "width": 280
+      }
+    },
+    {
+      "id": "9d0f5bb7-bd05-4e67-8271-3469a44afb4b",
+      "name": "结束",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3360,
+        560
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b4fb0353-d719-4dc3-83e1-00ed68576c77",
+      "name": "按销售编号分组生成清单（汇总）",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        3600,
+        300
+      ],
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "sales_list_files"
+      }
+    },
+    {
+      "id": "3d270dd4-4af2-4984-84cb-aeaa4f2eda98",
+      "name": "按销售编号分组生成清单（空结果）",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3600,
+        560
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3d270dd4-4af2-4984-84cb-aeaa4f2eda98",
+              "name": "sales_list_files",
+              "value": "={{ [] }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7287ce7d-a376-4fad-8cfe-287bba94f729",
+      "name": "按销售编号分组生成清单（合并结果）",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        3840,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ef054f71-eefb-4fc1-808f-ab17f65476bd",
+      "name": "输出标准透视表与清单文件",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4080,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "13e785db-fec0-468b-8da5-aa29825d9b3f",
+      "name": "便签：输出标准透视表与清单文件",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        4080,
+        80
+      ],
+      "parameters": {
+        "content": "输出标准透视表与清单文件\n\n数据整理（模板是描述而非字段拼接，导入后请改写为 Code 或 Set 节点）：\n整理输出标准透视表 {{n2.standard_pivot}} 与各销售异常清单文件 {{loop_sales.sales_list_files}}，标注文件清单与分发说明，供用户手动分发。\n\n汇总标准化透视表与每个销售的异常待核对清单文件，向用户交付输出；本流程仅生成文件，由用户手动分发给各销售并收集回复，暂不自动发送企微消息。",
+        "height": 200,
+        "width": 280
+      }
+    },
+    {
+      "id": "fa2d2ead-c017-4f3d-8c72-a4af0bda1079",
+      "name": "结束 (2)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4320,
+        300
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "结束": {
+      "main": [
+        [
+          {
+            "node": "按销售编号分组生成清单",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "按销售编号分组生成清单": {
+      "main": [
+        [
+          {
+            "node": "按销售编号分组生成清单（汇总）",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "按销售编号聚合异常订单",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "按销售编号聚合异常订单": {
+      "main": [
+        [
+          {
+            "node": "生成该销售清单文件",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "生成该销售清单文件": {
+      "main": [
+        [
+          {
+            "node": "结束",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "按销售编号分组生成清单（准备数据）": {
+      "main": [
+        [
+          {
+            "node": "按销售编号分组生成清单（有数据？）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "按销售编号分组生成清单（有数据？）": {
+      "main": [
+        [
+          {
+            "node": "按销售编号分组生成清单（拆分）",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "按销售编号分组生成清单（空结果）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "按销售编号分组生成清单（拆分）": {
+      "main": [
+        [
+          {
+            "node": "按销售编号分组生成清单",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "按销售编号分组生成清单（汇总）": {
+      "main": [
+        [
+          {
+            "node": "按销售编号分组生成清单（合并结果）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "按销售编号分组生成清单（空结果）": {
+      "main": [
+        [
+          {
+            "node": "按销售编号分组生成清单（合并结果）",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "触发器（定时触发）": {
+      "main": [
+        [
+          {
+            "node": "上传/读取ERP导出订单",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "上传/读取ERP导出订单": {
+      "main": [
+        [
+          {
+            "node": "字段映射并生成标准透视表",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "字段映射并生成标准透视表": {
+      "main": [
+        [
+          {
+            "node": "调用ERP核对订单字段与销售编号",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "调用ERP核对订单字段与销售编号": {
+      "main": [
+        [
+          {
+            "node": "是否存在待确认例外项",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "是否存在待确认例外项": {
+      "main": [
+        [
+          {
+            "node": "人工确认例外项与销售编号",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "按规则筛选三类异常订单",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "人工确认例外项与销售编号": {
+      "main": [
+        [
+          {
+            "node": "按规则筛选三类异常订单",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "按规则筛选三类异常订单": {
+      "main": [
+        [
+          {
+            "node": "按销售编号分组生成清单（准备数据）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "按销售编号分组生成清单（合并结果）": {
+      "main": [
+        [
+          {
+            "node": "输出标准透视表与清单文件",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "输出标准透视表与清单文件": {
+      "main": [
+        [
+          {
+            "node": "结束 (2)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
