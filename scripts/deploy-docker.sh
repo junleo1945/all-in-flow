@@ -51,7 +51,7 @@ default() { export "$1=${!1:-$2}"; }
 default POSTGRES_USER aif
 default POSTGRES_PASSWORD aif
 default POSTGRES_DB all_in_flow
-default WEB_PORT 8080
+default WEB_PORT 9088
 default DEEPSEEK_API_KEY ""
 default DEEPSEEK_BASE_URL https://api.deepseek.com
 default VISION_MODEL_ID ""
