@@ -15,6 +15,8 @@ UPLOAD_VOL=aif-uploads
 PG_CTR=aif-postgres
 SERVER_CTR=aif-server
 WEB_CTR=aif-web
+# 数据库镜像可通过 POSTGRES_IMAGE 覆盖，例如拉取 Docker Hub 不稳定时换成镜像源
+PG_IMAGE="${POSTGRES_IMAGE:-postgres:16-alpine}"
 
 if [ "${1:-}" = "stop" ]; then
   docker rm -f "$WEB_CTR" "$SERVER_CTR" "$PG_CTR" >/dev/null 2>&1 || true
@@ -78,11 +80,11 @@ docker volume create "$UPLOAD_VOL" >/dev/null
 echo "==> 替换已有容器"
 docker rm -f "$WEB_CTR" "$SERVER_CTR" "$PG_CTR" >/dev/null 2>&1 || true
 
-echo "==> 启动数据库"
+echo "==> 启动数据库（镜像：$PG_IMAGE）"
 docker run -d --name "$PG_CTR" --network "$NET" --restart unless-stopped \
   -e POSTGRES_USER -e POSTGRES_PASSWORD -e POSTGRES_DB \
   -v "$PG_VOL:/var/lib/postgresql/data" \
-  postgres:16-alpine >/dev/null
+  "$PG_IMAGE" >/dev/null
 
 echo "==> 等待数据库就绪"
 for i in $(seq 1 30); do
