@@ -1,23 +1,36 @@
 # 在 GitHub 上构建镜像并推送到 GHCR（ghcr.io/<owner>/...），测试服务器只需拉取。
 # 同时把 postgres 镜像同步到 GHCR，部署时服务器不再访问 Docker Hub。
+# 仅当 PR 合并到 main 时触发；直接 push 到 main 不会触发。手动重建可用 workflow_dispatch。
 name: docker-images
 
 on:
-  push:
+  pull_request:
     branches: [main]
+    types: [closed]
   workflow_dispatch:
 
 permissions:
   contents: read
   packages: write
 
+# 同一时间只跑一个构建，避免两次合并同时覆盖 latest 标签
+concurrency:
+  group: docker-images-main
+  cancel-in-progress: false
+
 jobs:
   build:
+    # 只有真正合并（merged）的 PR 才构建；关闭未合并的 PR 直接跳过
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     env:
       IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
+      # 合并后 main 上的提交 SHA；手动触发时退回到当前 ref 的 SHA
+      IMAGE_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.IMAGE_SHA }}
 
       - uses: docker/setup-buildx-action@v3
 
@@ -35,7 +48,7 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE_PREFIX }}/all-in-flow-server:latest
-            ${{ env.IMAGE_PREFIX }}/all-in-flow-server:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/all-in-flow-server:${{ env.IMAGE_SHA }}
           cache-from: type=gha,scope=server
           cache-to: type=gha,mode=max,scope=server
 
@@ -47,7 +60,7 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE_PREFIX }}/all-in-flow-web:latest
-            ${{ env.IMAGE_PREFIX }}/all-in-flow-web:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/all-in-flow-web:${{ env.IMAGE_SHA }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
