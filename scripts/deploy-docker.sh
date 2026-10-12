@@ -51,6 +51,7 @@ default() { export "$1=${!1:-$2}"; }
 default POSTGRES_USER aif
 default POSTGRES_PASSWORD aif
 default POSTGRES_DB all_in_flow
+default POSTGRES_PORT 9099
 default WEB_PORT 9088
 default DEEPSEEK_API_KEY ""
 default DEEPSEEK_BASE_URL https://api.deepseek.com
@@ -100,8 +101,10 @@ docker volume create "$UPLOAD_VOL" >/dev/null
 echo "==> 替换已有容器"
 docker rm -f "$WEB_CTR" "$SERVER_CTR" "$PG_CTR" >/dev/null 2>&1 || true
 
-echo "==> 启动数据库（镜像：$PG_IMG）"
+echo "==> 启动数据库（镜像：$PG_IMG，宿主机端口 127.0.0.1:$POSTGRES_PORT）"
+# 映射到宿主机回环地址，外部工具（DBeaver、psql 等）可直连；远程访问请用 SSH 隧道
 docker run -d --name "$PG_CTR" --network "$NET" --restart unless-stopped \
+  -p "127.0.0.1:${POSTGRES_PORT}:5432" \
   -e POSTGRES_USER -e POSTGRES_PASSWORD -e POSTGRES_DB \
   -v "$PG_VOL:/var/lib/postgresql/data" \
   "$PG_IMG" >/dev/null
