@@ -50,7 +50,8 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/all-in-flow-server:latest
             ${{ env.IMAGE_PREFIX }}/all-in-flow-server:${{ env.IMAGE_SHA }}
           cache-from: type=gha,scope=server
-          cache-to: type=gha,mode=max,scope=server
+          # 缓存导出偶发 "failed to reserve cache"，不应中断镜像构建与推送
+          cache-to: type=gha,mode=max,scope=server,ignore-error=true
 
       - name: 构建并推送前端镜像
         uses: docker/build-push-action@v6
@@ -62,7 +63,7 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/all-in-flow-web:latest
             ${{ env.IMAGE_PREFIX }}/all-in-flow-web:${{ env.IMAGE_SHA }}
           cache-from: type=gha,scope=web
-          cache-to: type=gha,mode=max,scope=web
+          cache-to: type=gha,mode=max,scope=web,ignore-error=true
 
       - name: 同步 postgres 镜像到 GHCR
         run: |
