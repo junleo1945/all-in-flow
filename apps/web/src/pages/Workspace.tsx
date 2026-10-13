@@ -69,8 +69,8 @@ function clampChatWidth(w: number): number {
   return Math.min(max, Math.max(CHAT_W_MIN, Math.round(w)));
 }
 
-const HINTS = [
-  { label: "直接给我方案", text: "请直接给我方案，基于现在已有的信息。" },
+const HINTS: Array<{ label: string; text: string; prefill?: boolean; intent?: "generate_now" }> = [
+  { label: "直接生成工作流", text: "请直接给我方案并生成工作流，基于现在已有的信息，缺的标为待确认。", intent: "generate_now" },
   { label: "换一个痛点", text: "这个先不聊了，换一个痛点来聊。" },
   { label: "这一步不对", text: "这一步不对：", prefill: true },
 ];
@@ -118,7 +118,8 @@ export default function WorkspacePage() {
   const idRef = useRef(0);
   const nextId = useCallback(() => `i${++idRef.current}`, []);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const initialSent = useRef(false);
+  // 从首页带过来的第一条消息，在历史加载完成后发送一次（见加载 effect）
+  const pendingInitial = useRef(initial);
   const abortRef = useRef<AbortController | null>(null);
 
   const scene = useScene(ir);
@@ -194,12 +195,19 @@ export default function WorkspacePage() {
     (async () => {
       try {
         const d = await loadDetail();
-        const history = await api.get<Array<{ role: "user" | "assistant"; text: string }>>(`/conversations/${id}/messages`);
+        const history = await api.get<Array<{ role: "user" | "assistant"; text: string; createdAt: string }>>(`/conversations/${id}/messages`);
         if (cancelled) return;
         setItems(historyToItems(history, nextId));
         if (d.workflows.length) {
           const w = d.workflows[0]!;
           setSelected({ workflowId: w.id, name: w.name, version: w.latestVersion, latestVersion: w.latestVersion });
+        }
+        // 首页带过来的第一条消息：历史加载完成后再发送，避免历史结果覆盖刚加入的用户消息；只发一次
+        const first = pendingInitial.current;
+        if (first) {
+          pendingInitial.current = undefined;
+          nav(`/c/${id}`, { replace: true, state: null });
+          void sendRef.current(first);
         }
       } catch (e) {
         if (!cancelled) setLoadError(e instanceof ApiError ? e.message : "加载失败");
@@ -305,10 +313,10 @@ export default function WorkspacePage() {
   };
 
   const send = useCallback(
-    async (text: string, attachmentIds: string[] = []) => {
+    async (text: string, attachmentIds: string[] = [], intent?: "generate_now") => {
       if (!text.trim() || busy) return;
       setBusy(true);
-      setItems((prev) => [...closeStreaming(prev), { kind: "msg", id: nextId(), role: "user", text, ...(attachmentIds.length ? { attachments: attachmentIds } : {}) }]);
+      setItems((prev) => [...closeStreaming(prev), { kind: "msg", id: nextId(), role: "user", text, time: new Date().toISOString(), ...(attachmentIds.length ? { attachments: attachmentIds } : {}) }]);
       const controller = new AbortController();
       abortRef.current = controller;
       try {
@@ -329,6 +337,7 @@ export default function WorkspacePage() {
           },
           controller.signal,
           attachmentIds,
+          intent,
         );
       } catch (e) {
         if ((e as Error).name !== "AbortError") {
@@ -344,14 +353,11 @@ export default function WorkspacePage() {
     [busy, id, nextId, refreshWorkflows],
   );
 
-  // 从首页带过来的第一条消息：只发送一次（避免 StrictMode 重复执行）
+  // 发送函数的最新引用：加载流程要发送首条消息，但不能依赖 send（它会随 busy 变化，变化时加载 effect 会重跑并中止请求）
+  const sendRef = useRef(send);
   useEffect(() => {
-    if (initial && !initialSent.current && !loadError) {
-      initialSent.current = true;
-      nav(location.pathname, { replace: true, state: null });
-      void send(initial);
-    }
-  }, [initial, loadError, send, nav, location.pathname]);
+    sendRef.current = send;
+  }, [send]);
 
   const answerChoice = (itemId: string, answer: string) => {
     setItems((prev) => prev.map((it) => (it.id === itemId && it.kind === "choices" ? { ...it, answered: answer } : it)));
@@ -502,7 +508,7 @@ export default function WorkspacePage() {
           onChoice={answerChoice}
           onStop={() => { abortRef.current?.abort(); void api.post(`/conversations/${id}/abort`).catch(() => {}); }}
           hints={HINTS}
-          onHint={(h) => void send(h.text)}
+          onHint={(h) => void send(h.text, [], h.intent)}
         />
 
         {showPanel && (

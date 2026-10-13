@@ -92,3 +92,13 @@ export async function loadSessionEntries(db: Db, conversationId: string): Promis
     .orderBy(asc(sessionEntries.seq));
   return rows.map((r) => r.entry as FileEntry);
 }
+
+/** 会话条目连同写入时间（展示历史消息的时间用） */
+export async function loadSessionEntryRows(db: Db, conversationId: string): Promise<Array<{ entry: FileEntry; createdAt: Date }>> {
+  const rows = await db
+    .select({ entry: sessionEntries.entry, createdAt: sessionEntries.createdAt })
+    .from(sessionEntries)
+    .where(eq(sessionEntries.conversationId, conversationId))
+    .orderBy(asc(sessionEntries.seq));
+  return rows.map((r) => ({ entry: r.entry as FileEntry, createdAt: r.createdAt }));
+}

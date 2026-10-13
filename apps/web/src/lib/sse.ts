@@ -39,12 +39,14 @@ export async function sendMessage(
   onEvent: (e: SseEvent) => void,
   signal?: AbortSignal,
   attachmentIds?: string[],
+  intent?: "generate_now",
 ): Promise<void> {
+  const body = { text, ...(attachmentIds?.length ? { attachmentIds } : {}), ...(intent ? { intent } : {}) };
   const res = await fetch(`/api/conversations/${conversationId}/messages`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(attachmentIds?.length ? { text, attachmentIds } : { text }),
+    body: JSON.stringify(body),
     signal,
   });
   if (!res.ok || !res.body) {

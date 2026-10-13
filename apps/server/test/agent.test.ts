@@ -99,8 +99,11 @@ describe.skipIf(!url)("访谈 Agent（假模型 + 真实数据库）", () => {
     const userTexts = a.session.messages
       .filter((m: any) => m.role === "user")
       .map((m: any) => (typeof m.content === "string" ? m.content : m.content?.[0]?.text));
-    expect(userTexts).toContain("我是销售运营，每周要做销售周报");
-    expect(userTexts).toContain("我们上次聊到哪了？");
+    // 用户消息前面会带上 <aif-context> 状态块，所以按包含判断
+    const has = (s: string) => userTexts.some((t) => t?.includes(s));
+    expect(has("我是销售运营，每周要做销售周报")).toBe(true);
+    expect(has("我们上次聊到哪了？")).toBe(true);
+    expect(has("<aif-context>")).toBe(true);
     registry.dispose(convId);
   }, 30000);
 

@@ -74,6 +74,7 @@ export async function runPersona(opts: EvalOptions, persona: Persona): Promise<P
       if (event === "text_delta") reply += data.delta;
       if (event === "state_patch") {
         if (data.task) taskIds.add(data.task.id);
+        if (data.profile?.fastTrack === true) run.fastTrack = true;
         if (Array.isArray(data.candidates) && run.firstProposeTurn === undefined) {
           run.firstProposeTurn = turn;
           run.tasksAtFirstPropose = taskIds.size;

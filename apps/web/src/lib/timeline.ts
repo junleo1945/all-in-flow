@@ -2,7 +2,7 @@ import type { Candidate, PainPoint, Profile, Task } from "./types";
 
 /** 对话时间线中的一项 */
 export type Item =
-  | { kind: "msg"; id: string; role: "user" | "assistant"; text: string; streaming?: boolean; attachments?: string[] }
+  | { kind: "msg"; id: string; role: "user" | "assistant"; text: string; streaming?: boolean; attachments?: string[]; time?: string }
   | { kind: "tools"; id: string; tools: Array<{ id: string; name: string; status: "start" | "end"; error?: boolean }> }
   | { kind: "choices"; id: string; question: string; options: string[]; multi: boolean; allowOther: boolean; answered?: string }
   | { kind: "proposals"; id: string; candidates: Candidate[] }
@@ -24,7 +24,7 @@ export function applyEvent(items: Item[], e: ServerEvent, nextId: () => string):
       if (last && last.kind === "msg" && last.role === "assistant" && last.streaming) {
         return [...items.slice(0, -1), { ...last, text: last.text + delta }];
       }
-      return [...items, { kind: "msg", id: nextId(), role: "assistant", text: delta, streaming: true }];
+      return [...items, { kind: "msg", id: nextId(), role: "assistant", text: delta, streaming: true, time: new Date().toISOString() }];
     }
     case "tool": {
       const { id, name, status, error } = e.data ?? {};
@@ -85,8 +85,28 @@ export function closeStreaming(items: Item[]): Item[] {
 }
 
 /** 把服务端的历史消息转换成时间线 */
-export function historyToItems(messages: Array<{ role: "user" | "assistant"; text: string; attachments?: string[] }>, nextId: () => string): Item[] {
-  return messages.map((m) => ({ kind: "msg", id: nextId(), role: m.role, text: m.text, ...(m.attachments ? { attachments: m.attachments } : {}) }));
+export function historyToItems(
+  messages: Array<{ role: "user" | "assistant"; text: string; attachments?: string[]; createdAt?: string }>,
+  nextId: () => string,
+): Item[] {
+  return messages.map((m) => ({
+    kind: "msg",
+    id: nextId(),
+    role: m.role,
+    text: m.text,
+    ...(m.attachments ? { attachments: m.attachments } : {}),
+    ...(m.createdAt ? { time: m.createdAt } : {}),
+  }));
+}
+
+/** 消息时间的展示：当天只显示 HH:mm，其他日期显示 MM-DD HH:mm（按浏览器本地时区） */
+export function formatMsgTime(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  return sameDay ? hm : `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${hm}`;
 }
 
 /** 把 state_patch 应用到画像（与服务端的 upsert 规则保持一致） */
@@ -108,6 +128,9 @@ export function applyProfilePatch(profile: Profile, data: any): Profile {
   }
   if (Array.isArray(data?.candidates)) {
     next = { ...next, candidates: data.candidates };
+  }
+  if (data?.profile?.fastTrack === true) {
+    next = { ...next, fastTrack: true };
   }
   return next;
 }

@@ -79,6 +79,8 @@ describe("过早下结论", () => {
 
   it("从未提出方案时不算过早", () => {
     expect(scoreRun(sales, { ...perfect, firstProposeTurn: undefined, tasksAtFirstPropose: 0 }).prematureConclusion).toBe(false);
+    // 用户要求直接出结果（快速模式）时，提前出方案不算过早下结论
+    expect(scoreRun(sales, { ...perfect, tasksAtFirstPropose: 1, fastTrack: true }).prematureConclusion).toBe(false);
   });
 });
 

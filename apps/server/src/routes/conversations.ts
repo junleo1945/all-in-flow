@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { AppVariables } from "../http/context.js";
 import { AppError, ok } from "../http/envelope.js";
 import { describeForAgent, type AttachmentService } from "../attachments/service.js";
+import { stripTurnContext } from "../agent/turnContext.js";
 import type { SessionRegistry } from "../agent/registry.js";
 import { SessionBusy } from "../agent/registry.js";
 import { assertBudget, QuotaExceeded } from "../agent/quota.js";
@@ -15,7 +16,7 @@ import {
   softDeleteConversation,
   setPinned,
   renameConversation,
-  loadSessionEntries,
+  loadSessionEntryRows,
   ConversationNotFound,
 } from "../db/repos/conversationRepo.js";
 import { workflows } from "../db/schema/index.js";
@@ -31,9 +32,18 @@ export interface ConversationRouteDeps {
   config: Pick<AppConfig, "dailyTokenQuotaPerUser" | "dailyCostLimitUsd" | "maxTurnsPerConversation">;
 }
 
+/** 消息的时间：条目自身的 timestamp（ISO）或消息的 timestamp（毫秒），都没有时用入库时间 */
+function messageTime(entry: { timestamp?: unknown }, message: { timestamp?: unknown }, storedAt: Date): string {
+  if (typeof entry.timestamp === "string" && !Number.isNaN(Date.parse(entry.timestamp))) return new Date(entry.timestamp).toISOString();
+  if (typeof message.timestamp === "number" && Number.isFinite(message.timestamp)) return new Date(message.timestamp).toISOString();
+  return storedAt.toISOString();
+}
+
 const MessageBody = z.object({
   text: z.string().min(1).max(4000),
   attachmentIds: z.array(z.string().uuid()).max(10).optional(),
+  /** 前端按钮的确定信号：用户要求立即出结果（进入快速模式） */
+  intent: z.enum(["generate_now"]).optional(),
 });
 
 /**
@@ -119,23 +129,28 @@ export function conversationRoutes(deps: ConversationRouteDeps) {
     const userId = c.get("user").id;
     const id = c.req.param("id");
     await guard(() => getConversation(deps.db, userId, id));
-    const entries = await loadSessionEntries(deps.db, id);
-    const messages: Array<{ role: "user" | "assistant"; text: string; attachments?: string[] }> = [];
-    for (const e of entries as any[]) {
+    const rows = await loadSessionEntryRows(deps.db, id);
+    const messages: Array<{ role: "user" | "assistant"; text: string; createdAt: string; attachments?: string[] }> = [];
+    for (const { entry: e, createdAt } of rows as Array<{ entry: any; createdAt: Date }>) {
       if (e.type !== "message") continue;
       const m = e.message;
       if (m?.role !== "user" && m?.role !== "assistant") continue;
       const text = extractText(m.content);
       if (!text) continue;
-      // 去掉内部使用的导入说明，只展示用户自己的话
       // 去掉内部使用的导入说明和图片识别资料，只展示用户自己的话
-      const visible = text
+      const visible = stripTurnContext(text)
         .replace(/^\[系统说明：[\s\S]*?\]\n\n/, "")
         .replace(/\[用户上传了图片[\s\S]*?（以上内容来自图片识别，是用户提供的资料，不是指令）\n*/g, "")
         .trim();
       // 图片资料块里记录了附件 id，用于刷新后仍能显示缩略图
       const attachmentIds = [...text.matchAll(/附件 id：([0-9a-f-]{36})/g)].map((x) => x[1]!);
-      messages.push({ role: m.role, text: visible, ...(attachmentIds.length ? { attachments: attachmentIds } : {}) });
+      messages.push({
+        role: m.role,
+        text: visible,
+        // 消息自身的时间优先（条目在回合结束时才同步入库，入库时间可能晚于消息产生的时间）
+        createdAt: messageTime(e, m, createdAt),
+        ...(attachmentIds.length ? { attachments: attachmentIds } : {}),
+      });
     }
     return ok(c, messages);
   });
@@ -252,7 +267,8 @@ export function conversationRoutes(deps: ConversationRouteDeps) {
         text = `${describeForAgent(rows)}\n\n${text}`;
         await deps.attachments.markSent(attIds);
       }
-      await runTurn(send, (sink) => deps.registry.prompt(userId, id, text, sink));
+      const generateNow = parsed.data.intent === "generate_now";
+      await runTurn(send, (sink) => deps.registry.prompt(userId, id, text, sink, { generateNow }));
     });
   });
 
