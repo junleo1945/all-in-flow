@@ -15,6 +15,8 @@ export interface EvalRun {
   firstProposeTurn?: number;
   /** 提出方案时已记录的工作项数量（用于判断是否过早下结论） */
   tasksAtFirstPropose?: number;
+  /** 用户要求直接出结果（快速模式）。此时提前出方案是用户的选择，不算过早下结论 */
+  fastTrack?: boolean;
   /** 生成的每个工作流是否通过 IR 校验 */
   workflowValidity: boolean[];
   /** 生成的每个工作流的 action 覆盖率（有 action 的 step 占比，没有 step 的不记录） */
@@ -63,7 +65,7 @@ export function scoreRun(persona: Persona, run: EvalRun): RunMetrics {
     run.workflowValidity.length === 0 ? null : run.workflowValidity.filter(Boolean).length / run.workflowValidity.length;
 
   const prematureConclusion =
-    run.firstProposeTurn !== undefined && (run.tasksAtFirstPropose ?? 0) < MIN_TASKS_BEFORE_PROPOSE;
+    !run.fastTrack && run.firstProposeTurn !== undefined && (run.tasksAtFirstPropose ?? 0) < MIN_TASKS_BEFORE_PROPOSE;
 
   const coverage = run.actionCoverage ?? [];
   const actionCoverage = coverage.length === 0 ? null : avg(coverage)!;

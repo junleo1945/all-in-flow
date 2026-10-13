@@ -186,10 +186,14 @@ describe.skipIf(!url)("历史消息接口", () => {
     ]);
     await env.api(cookie, `/api/conversations/${id}/messages`, { method: "POST", body: JSON.stringify({ text: "我是销售运营" }) }).then((r) => r.text());
     const res = await (await env.api(cookie, `/api/conversations/${id}/messages`)).json();
-    expect(res.data).toEqual([
+    expect(res.data.map(({ createdAt: _t, ...m }: { createdAt: string }) => m)).toEqual([
       { role: "user", text: "我是销售运营" },
       { role: "assistant", text: "好的，我是销售运营。" },
     ]);
+    // 每条消息都带上有效的时间
+    for (const m of res.data as Array<{ createdAt: string }>) {
+      expect(Number.isNaN(Date.parse(m.createdAt))).toBe(false);
+    }
     // 清理：本测试新建的会话、条目、登录会话和用户
     const schema = await import("../src/db/schema/index.js");
     const { eq } = await import("drizzle-orm");

@@ -1,9 +1,10 @@
 import { Type } from "typebox";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { WorkflowIR } from "@aif/workflow-ir";
-import { upsertPainPoint, upsertTask, type Candidate, type Profile } from "../domain/profile.js";
+import { MAX_NOTES, progressLine, upsertPainPoint, upsertTask, type Candidate, type Profile } from "../domain/profile.js";
 import { randomUUID } from "node:crypto";
 import type { GeneratedWorkflow } from "./irGenerator.js";
+import { fastTrackNextStep } from "./turnContext.js";
 
 export const STAGES = ["role", "inventory", "dig", "rank", "propose", "generate"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -27,7 +28,11 @@ export interface ToolContext {
   askImage?: (attachmentId: string, question: string) => Promise<string>;
 }
 
-const text = (t: string) => ({ content: [{ type: "text" as const, text: t }], details: {} });
+const text = (t: string, opts: { terminate?: boolean } = {}) => ({
+  content: [{ type: "text" as const, text: t }],
+  details: {},
+  ...(opts.terminate ? { terminate: true } : {}),
+});
 
 const Frequency = Type.Union([
   Type.Literal("daily"),
@@ -65,7 +70,7 @@ export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
       summary: Type.Optional(Type.String()),
     }),
     execute: async (_id: string, p: { role?: string; team?: string; systems?: string[]; summary?: string }) => {
-      const role = await ctx.withLock(async () => {
+      const { role, progress } = await ctx.withLock(async () => {
         const profile = await ctx.loadProfile();
         profile.role = {
           role: p.role ?? profile.role.role,
@@ -74,10 +79,10 @@ export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
           summary: p.summary ?? profile.role.summary,
         };
         await ctx.saveProfile(profile);
-        return profile.role;
+        return { role: profile.role, progress: progressLine(profile) };
       });
       ctx.emit("state_patch", { profile: { role } });
-      return text("角色信息已记录");
+      return text(`角色信息已记录。${progress}`);
     },
   };
 
@@ -94,14 +99,14 @@ export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
       systems: Type.Optional(Type.Array(Type.String())),
     }),
     execute: async (_id: string, p: Parameters<typeof upsertTask>[1]) => {
-      const task = await ctx.withLock(async () => {
+      const { task, progress } = await ctx.withLock(async () => {
         const profile = await ctx.loadProfile();
         const t = upsertTask(profile, p);
         await ctx.saveProfile(profile);
-        return t;
+        return { task: t, progress: progressLine(profile) };
       });
       ctx.emit("state_patch", { task });
-      return text(`已记录工作：${task.title}（id: ${task.id}）`);
+      return text(`已记录工作：${task.title}（id: ${task.id}）。${progress}`);
     },
   };
 
@@ -119,15 +124,15 @@ export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
       evidence: Type.Optional(Type.String()),
     }),
     execute: async (_id: string, p: Parameters<typeof upsertPainPoint>[1]) => {
-      const point = await ctx.withLock(async () => {
+      const { point, progress } = await ctx.withLock(async () => {
         const profile = await ctx.loadProfile();
         const pt = upsertPainPoint(profile, p);
         await ctx.saveProfile(profile);
-        return pt;
+        return { point: pt, progress: progressLine(profile) };
       });
       ctx.emit("state_patch", { painPoint: point });
       const score = point.score === null ? "耗时未知，暂不计分" : `优先级 ${point.score}`;
-      return text(`已记录痛点：${point.title}（${score}）`);
+      return text(`已记录痛点：${point.title}（${score}）。${progress}`);
     },
   };
 
@@ -142,8 +147,52 @@ export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
       allowOther: Type.Optional(Type.Boolean()),
     }),
     execute: async (_id: string, p: { question: string; options: string[]; multi?: boolean; allowOther?: boolean }) => {
+      // 快速模式下服务端拦截提问：不展示选项，并让模型直接推进
+      const profile = await ctx.loadProfile();
+      if (profile.fastTrack) {
+        return text(`用户已要求直接出结果，不再提问。${fastTrackNextStep(profile)}`);
+      }
       ctx.emit("choices", { question: p.question, options: p.options, multi: p.multi ?? false, allowOther: p.allowOther ?? true });
-      return text("选项已展示给用户，请等待用户回答。");
+      return text("选项已展示给用户，请等待用户回答。", { terminate: true });
+    },
+  };
+
+  const recordNote = {
+    name: "record_note",
+    label: "记录要点",
+    description:
+      "记录访谈中确定的事实。用户回答了一个事实时用 confirmed；用户明确不愿回答或跳过某个话题时用 declined；仍需确认的问题用 pending。每次只记一条，text 写简短的事实或话题。",
+    parameters: Type.Object({
+      kind: Type.Union([Type.Literal("confirmed"), Type.Literal("declined"), Type.Literal("pending")]),
+      text: Type.String({ maxLength: 200 }),
+    }),
+    execute: async (_id: string, p: { kind: "confirmed" | "declined" | "pending"; text: string }) => {
+      const { progress } = await ctx.withLock(async () => {
+        const profile = await ctx.loadProfile();
+        const exists = profile.notes.some((n) => n.kind === p.kind && n.text === p.text);
+        if (!exists) profile.notes = [...profile.notes, { kind: p.kind, text: p.text }].slice(-MAX_NOTES);
+        await ctx.saveProfile(profile);
+        return { progress: progressLine(profile) };
+      });
+      return text(`已记录要点。${progress}`);
+    },
+  };
+
+  const enterFastTrack = {
+    name: "enter_fast_track",
+    label: "直接出结果",
+    description:
+      "用户表达想直接要结果、不想再回答问题时调用（例如“够了，出吧”“先这样，生成”“没有了，直接给我方案”等）。调用后整个会话不再追问，直接进入方案和生成。",
+    parameters: Type.Object({ reason: Type.Optional(Type.String({ maxLength: 200 })) }),
+    execute: async (_id: string, p: { reason?: string }) => {
+      const next = await ctx.withLock(async () => {
+        const profile = await ctx.loadProfile();
+        profile.fastTrack = true;
+        await ctx.saveProfile(profile);
+        return fastTrackNextStep(profile);
+      });
+      ctx.emit("state_patch", { profile: { fastTrack: true } });
+      return text(`已进入快速模式${p.reason ? `（${p.reason}）` : ""}，不再提问。${next}`);
     },
   };
 
@@ -165,13 +214,18 @@ export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
     }),
     execute: async (_id: string, p: { candidates: Omit<Candidate, "id">[] }) => {
       const candidates: Candidate[] = p.candidates.map((c) => ({ ...c, id: randomUUID() }));
-      await ctx.withLock(async () => {
+      const fastTrack = await ctx.withLock(async () => {
         const profile = await ctx.loadProfile();
         profile.candidates = candidates;
         await ctx.saveProfile(profile, "propose");
+        return profile.fastTrack;
       });
       ctx.emit("state_patch", { candidates });
-      return text(`已提出 ${candidates.length} 个方案，请等待用户选择。`);
+      // 快速模式下方案直接进入生成，不等待用户选择
+      if (fastTrack) {
+        return text(`已提出 ${candidates.length} 个方案。用户已要求直接生成，请立即使用第一个方案调用 emit_workflow。`);
+      }
+      return text(`已提出 ${candidates.length} 个方案，请等待用户选择。`, { terminate: true });
     },
   };
 
@@ -208,7 +262,17 @@ export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
     },
   };
 
-  const tools: unknown[] = [setStage, updateProfile, recordTask, recordPainPoint, askChoices, proposeWorkflows, emitWorkflow];
+  const tools: unknown[] = [
+    setStage,
+    updateProfile,
+    recordTask,
+    recordPainPoint,
+    recordNote,
+    enterFastTrack,
+    askChoices,
+    proposeWorkflows,
+    emitWorkflow,
+  ];
   if (askImage) tools.push(askImage);
   return tools as ToolDefinition[];
 }
@@ -218,6 +282,8 @@ export const INTERVIEW_TOOL_NAMES = [
   "update_profile",
   "record_task",
   "record_pain_point",
+  "record_note",
+  "enter_fast_track",
   "ask_choices",
   "propose_workflows",
   "emit_workflow",

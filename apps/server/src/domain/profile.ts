@@ -47,19 +47,48 @@ export interface Candidate {
   systems: string[];
 }
 
+/** 访谈中确定下来的事实：已确认、用户明确拒绝回答的话题、仍待确认的问题 */
+export type NoteKind = "confirmed" | "declined" | "pending";
+
+export interface Note {
+  kind: NoteKind;
+  text: string;
+}
+
 export interface Profile {
   role: RoleInfo;
   tasks: Task[];
   painPoints: PainPoint[];
   candidates: Candidate[];
+  notes: Note[];
+  /** 用户要求直接出结果后置为 true，之后整个会话不再追问 */
+  fastTrack: boolean;
 }
+
+/** 完整记录一件工作所需：频率（必填）和单次耗时 */
+export const MIN_TASKS_FOR_PLAN = 3;
+export const MAX_NOTES = 40;
+
+export const isTaskComplete = (t: Task): boolean => t.minutesPerRun !== undefined;
 
 export const emptyProfile = (): Profile => ({
   role: { systems: [] },
   tasks: [],
   painPoints: [],
   candidates: [],
+  notes: [],
+  fastTrack: false,
 });
+
+/** 读取数据库中的画像时补齐新增字段，兼容旧数据 */
+export function normalizeProfile(raw: Partial<Profile> | null | undefined): Profile {
+  return { ...emptyProfile(), ...(raw ?? {}) } as Profile;
+}
+
+export function progressLine(profile: Profile): string {
+  const complete = profile.tasks.filter(isTaskComplete).length;
+  return `进度：完整工作 ${complete}/${MIN_TASKS_FOR_PLAN}，痛点 ${profile.painPoints.length}，已记录要点 ${profile.notes.length}。`;
+}
 
 export function scorePainPoint(p: Pick<PainPoint, "severity" | "automatable">, task?: Task): number | null {
   if (!task || task.minutesPerRun === undefined) return null;

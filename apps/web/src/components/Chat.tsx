@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
-import type { Item } from "../lib/timeline";
+import { formatMsgTime, type Item } from "../lib/timeline";
 import { ACCEPT_IMAGE, MAX_ATTACHMENTS, usePendingAttachments } from "../lib/attachments";
 import { ImageLightbox } from "./ImageLightbox";
 
@@ -22,8 +22,8 @@ export function Chat({
   onSend: (text: string, attachmentIds: string[]) => void;
   onChoice: (itemId: string, answer: string) => void;
   onStop: () => void;
-  hints: Array<{ label: string; text: string; prefill?: boolean }>;
-  onHint: (h: { label: string; text: string; prefill?: boolean }) => void;
+  hints: Array<{ label: string; text: string; prefill?: boolean; intent?: "generate_now" }>;
+  onHint: (h: { label: string; text: string; prefill?: boolean; intent?: "generate_now" }) => void;
   attachmentsEnabled: boolean;
 }) {
   const [input, setInput] = useState("");
@@ -174,27 +174,35 @@ export function Chat({
 
 function ItemView({ item, onChoice, busy, onPreview }: { item: Item; onChoice: (id: string, a: string) => void; busy: boolean; onPreview: (p: { src: string }) => void }) {
   switch (item.kind) {
-    case "msg":
+    case "msg": {
+      const time = item.time ? <div className={`msg-time ${item.role === "user" ? "me" : "ai"}`}>{formatMsgTime(item.time)}</div> : null;
       return item.role === "user" ? (
-        <div className="msg me">
-          {item.attachments?.length ? (
-            <div className="msg-thumbs">
-              {item.attachments.map((id) => (
-                <button key={id} className="att-img" onClick={() => onPreview({ src: `/api/attachments/${id}/file` })} aria-label="放大图片">
-                  <img src={`/api/attachments/${id}/file`} alt="" />
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {item.text}
-        </div>
+        <>
+          <div className="msg me">
+            {item.attachments?.length ? (
+              <div className="msg-thumbs">
+                {item.attachments.map((id) => (
+                  <button key={id} className="att-img" onClick={() => onPreview({ src: `/api/attachments/${id}/file` })} aria-label="放大图片">
+                    <img src={`/api/attachments/${id}/file`} alt="" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {item.text}
+          </div>
+          {time}
+        </>
       ) : (
-        <div className="msg ai">
-          <div className="who">AI 顾问</div>
-          {item.text}
-          {item.streaming && <span className="typing" style={{ display: "inline-flex", marginLeft: 4 }}><i /></span>}
-        </div>
+        <>
+          <div className="msg ai">
+            <div className="who">AI 顾问</div>
+            {item.text}
+            {item.streaming && <span className="typing" style={{ display: "inline-flex", marginLeft: 4 }}><i /></span>}
+          </div>
+          {time}
+        </>
       );
+    }
     case "tools":
       return (
         <div className="toolrow">

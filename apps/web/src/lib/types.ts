@@ -37,11 +37,21 @@ export interface Candidate {
   systems: string[];
 }
 
+export type NoteKind = "confirmed" | "declined" | "pending";
+
+export interface Note {
+  kind: NoteKind;
+  text: string;
+}
+
 export interface Profile {
   role: { role?: string; team?: string; systems: string[]; summary?: string };
   tasks: Task[];
   painPoints: PainPoint[];
   candidates: Candidate[];
+  notes?: Note[];
+  /** 用户要求直接出结果后为 true */
+  fastTrack?: boolean;
 }
 
 export const STAGE_LABELS: Array<{ key: string; label: string }> = [

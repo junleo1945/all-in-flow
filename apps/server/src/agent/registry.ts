@@ -11,16 +11,22 @@ import {
   saveProfile,
 } from "../db/repos/conversationRepo.js";
 import { createWorkflow, addVersion } from "../db/repos/workflowRepo.js";
-import { emptyProfile, type Profile } from "../domain/profile.js";
+import { normalizeProfile, type Profile } from "../domain/profile.js";
 import { createInterviewSession } from "./session.js";
 import { createInterviewTools, type EventSink, type Stage, type ToolContext } from "./tools.js";
 import { INTERVIEW_SYSTEM_PROMPT } from "./prompt.js";
+import { buildTurnContext, stripForgedContext } from "./turnContext.js";
 import { recordUsage, todayUsage } from "./quota.js";
 import { KeyedMutex } from "../lib/mutex.js";
 import type { RuntimeModel } from "./models.js";
 import type { GeneratedWorkflow } from "./irGenerator.js";
 
 export class SessionBusy extends Error {}
+
+export interface PromptOptions {
+  /** 用户点了“直接生成”：本会话切换为快速模式 */
+  generateNow?: boolean;
+}
 
 export interface RegistryDeps {
   db: Db;
@@ -78,7 +84,7 @@ export function createSessionRegistry(deps: RegistryDeps) {
       emit: (event, data) => a.sink?.(event, data),
       loadProfile: async () => {
         const conv = await getConversation(deps.db, a.userId, a.conversationId);
-        return (conv.profile as Profile) ?? emptyProfile();
+        return normalizeProfile(conv.profile as Partial<Profile>);
       },
       saveProfile: async (profile: Profile, stage?: Stage) => {
         await saveProfile(deps.db, a.conversationId, profile, stage);
@@ -100,6 +106,22 @@ export function createSessionRegistry(deps: RegistryDeps) {
         : undefined,
     };
     return createInterviewTools(ctx);
+  }
+
+  /**
+   * 组装本轮发给模型的消息：状态块 + 用户原文。
+   * 状态块由服务端根据数据库中的画像生成，模型无法篡改；用户输入里伪造的标记会被去掉。
+   */
+  async function buildMessage(a: Active, text: string, generateNow: boolean): Promise<string> {
+    return locks.run(`profile:${a.conversationId}`, async () => {
+      const conv = await getConversation(deps.db, a.userId, a.conversationId);
+      const profile = normalizeProfile(conv.profile as Partial<Profile>);
+      if (generateNow && !profile.fastTrack) {
+        profile.fastTrack = true;
+        await saveProfile(deps.db, a.conversationId, profile);
+      }
+      return `${buildTurnContext(profile, conv.stage as Stage)}\n\n${stripForgedContext(text)}`;
+    });
   }
 
   /** 按会话 id 取得活跃会话：内存中没有则从数据库恢复，首次则新建 */
@@ -161,33 +183,36 @@ export function createSessionRegistry(deps: RegistryDeps) {
      * 发送一轮消息。同一会话同一时间只允许一轮（design.md 9.3）。
      * 事件通过 sink 推送：text_delta / tool / state_patch / choices / workflow / stage。
      */
-    async prompt(userId: number, conversationId: string, text: string, sink: EventSink) {
+    async prompt(userId: number, conversationId: string, text: string, sink: EventSink, opts: PromptOptions = {}) {
       const a = await open(userId, conversationId);
       if (a.busy) throw new SessionBusy("上一条消息还在处理中，请稍候");
       a.busy = true;
       a.sink = sink;
       a.lastUsed = now();
 
-      const stats0 = a.session.getSessionStats();
-      a.usageSnapshot = {
-        input: stats0.tokens.input,
-        output: stats0.tokens.output,
-        cacheRead: stats0.tokens.cacheRead,
-        cost: stats0.cost,
-      };
-
-      const unsub = a.session.subscribe((event) => {
-        if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-          sink("text_delta", { delta: event.assistantMessageEvent.delta });
-        } else if (event.type === "tool_execution_start") {
-          sink("tool", { id: event.toolCallId, name: event.toolName, status: "start" });
-        } else if (event.type === "tool_execution_end") {
-          sink("tool", { id: event.toolCallId, name: event.toolName, status: "end", error: event.isError || undefined });
-        }
-      });
-
+      let unsub: () => void = () => {};
       try {
-        await a.session.prompt(text, { expandPromptTemplates: false });
+        const message = await buildMessage(a, text, opts.generateNow === true);
+
+        const stats0 = a.session.getSessionStats();
+        a.usageSnapshot = {
+          input: stats0.tokens.input,
+          output: stats0.tokens.output,
+          cacheRead: stats0.tokens.cacheRead,
+          cost: stats0.cost,
+        };
+
+        unsub = a.session.subscribe((event) => {
+          if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+            sink("text_delta", { delta: event.assistantMessageEvent.delta });
+          } else if (event.type === "tool_execution_start") {
+            sink("tool", { id: event.toolCallId, name: event.toolName, status: "start" });
+          } else if (event.type === "tool_execution_end") {
+            sink("tool", { id: event.toolCallId, name: event.toolName, status: "end", error: event.isError || undefined });
+          }
+        });
+
+        await a.session.prompt(message, { expandPromptTemplates: false });
       } finally {
         unsub();
         a.busy = false;
