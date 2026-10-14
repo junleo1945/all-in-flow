@@ -171,9 +171,9 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (!menuOpen) return;
     const onDown = (e: MouseEvent) => {
-      // 下拉选项挂在 body 上，点击它不应被当成点击了菜单以外的地方
+      // 下拉选项和导出预览弹窗挂在 body 上，点击它们不应被当成点击了菜单以外的地方
       const t = e.target as Element;
-      if (!exportWrapRef.current?.contains(t) && !t.closest?.(".ui-select-menu")) setMenuOpen(false);
+      if (!exportWrapRef.current?.contains(t) && !t.closest?.(".ui-select-menu, .export-preview-back")) setMenuOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);

@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import { checkExport, lower, toMermaid, type ExportFile, type WorkflowIR } from "@aif/workflow-ir";
 import { skillExporter, type SkillOptions } from "@aif/plugin-exporter-skill";
+import { promptExporter } from "@aif/plugin-exporter-prompt";
 import { n8nExporter, type N8nOptions } from "@aif/plugin-exporter-n8n";
 import { exportToBlob, exportToSvg, serializeAsJSON } from "@excalidraw/excalidraw";
 import type { Scene } from "./canvas";
@@ -49,20 +50,25 @@ export function exportIrJson(ir: WorkflowIR): Blob {
 }
 
 /**
- * 导出为 Agent Skill（zip）。有 error 级别的问题时拒绝导出。
- * packaging 为 claude-plugin 时，压缩包内是 Claude Code 插件的目录结构（.claude-plugin/ 和 skills/）。
+ * 生成 Agent Skill 的全部文件（未打包），供预览和打包使用。有 error 级别的问题时拒绝导出。
+ * packaging 为 claude-plugin 时，文件路径是 Claude Code 插件的目录结构（.claude-plugin/ 和 skills/）。
  */
-export async function exportSkillZip(ir: WorkflowIR, options: SkillOptions = { target: "generic", packaging: "zip" }) {
+export async function buildSkill(ir: WorkflowIR, options: SkillOptions = { target: "generic", packaging: "zip" }) {
   const graph = lower(ir);
   const issues = checkExport(skillExporter, graph);
   const errors = issues.filter((i) => i.level === "error");
   if (errors.length) throw new Error(errors.map((e) => e.message).join("；"));
 
-  const zip = new JSZip();
-  for (const f of await skillExporter.compile(graph, options)) zip.file(f.path, f.content);
-  const blob = await zip.generateAsync({ type: "blob" });
+  const files = (await skillExporter.compile(graph, options)) as ExportFile[];
   const suffix = options.packaging === "claude-plugin" ? "claude-plugin" : "skill";
-  return { blob, filename: `${ir.slug}.${suffix}.zip`, warnings: issues.map((i) => i.message), requirements: skillExporter.requirements(graph) };
+  return { files, filename: `${ir.slug}.${suffix}.zip`, warnings: issues.map((i) => i.message), requirements: skillExporter.requirements(graph) };
+}
+
+/** 把文件打包成 zip */
+export async function zipFiles(files: ExportFile[]): Promise<Blob> {
+  const zip = new JSZip();
+  for (const f of files) zip.file(f.path, f.content);
+  return zip.generateAsync({ type: "blob" });
 }
 
 /**
@@ -78,6 +84,26 @@ export async function exportN8nJson(ir: WorkflowIR, options: N8nOptions = n8nExp
   const [file] = (await n8nExporter.compile(graph, options)) as ExportFile[];
   const blob = new Blob([file!.content as string], { type: "application/json" });
   return { blob, filename: file!.path, warnings: issues.map((i) => i.message), requirements: n8nExporter.requirements(graph) };
+}
+
+/**
+ * 导出为对话提示词（<slug>.prompt.md）：粘贴到聊天窗口即可让 AI 带着用户完成流程。
+ * 有 error 级别的问题时拒绝导出。
+ */
+export async function exportPrompt(ir: WorkflowIR) {
+  const graph = lower(ir);
+  const issues = checkExport(promptExporter, graph);
+  const errors = issues.filter((i) => i.level === "error");
+  if (errors.length) throw new Error(errors.map((e) => e.message).join("；"));
+
+  // 完整版与精简版：预览时用文件树切换，下载时打成一个 zip
+  const files = (await promptExporter.compile(graph, promptExporter.defaultOptions)) as ExportFile[];
+  return {
+    files,
+    filename: `${ir.slug}.prompt.zip`,
+    warnings: issues.map((i) => i.message),
+    requirements: promptExporter.requirements(graph),
+  };
 }
 
 /** 触发浏览器下载 */

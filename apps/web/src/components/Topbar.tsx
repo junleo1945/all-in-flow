@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { api } from "../lib/api";
 import { formatTokens, useMe } from "../lib/useMe";
 
 export function BrandMark({ size = 22 }: { size?: number }) {
@@ -14,6 +15,12 @@ export function BrandMark({ size = 22 }: { size?: number }) {
 
 export function Topbar({ children, showUser = true }: { children?: ReactNode; showUser?: boolean }) {
   const { me } = useMe();
+  const navigate = useNavigate();
+  const logout = async () => {
+    // 即使请求失败也回到登录页：服务端的会话过期后同样需要重新登录
+    await api.post("/user/logout").catch(() => {});
+    navigate("/login", { replace: true });
+  };
   const pct = me ? Math.min(100, (me.usage.tokensToday / me.usage.dailyTokenQuota) * 100) : 0;
   return (
     <header className="topbar">
@@ -33,6 +40,7 @@ export function Topbar({ children, showUser = true }: { children?: ReactNode; sh
           </div>
           <div className="avatar" aria-hidden="true">{me.DisplayName.slice(0, 1)}</div>
           {me.DisplayName}
+          <button type="button" className="logout" onClick={logout}>退出</button>
         </div>
       )}
     </header>

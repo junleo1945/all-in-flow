@@ -27,7 +27,6 @@ export interface AppConfig {
   cookieDomain?: string;
   verifyIntervalSeconds: number;
   adminUsernames: string[];
-  exportPlugins: string[];
   publicBaseUrl: string;
   sharePublicEnabled: boolean;
   dailyTokenQuotaPerUser: number;
@@ -64,7 +63,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     cookieDomain: env.SESSION_COOKIE_DOMAIN || undefined,
     verifyIntervalSeconds: num(env.SESSION_VERIFY_INTERVAL_SECONDS, 300),
     adminUsernames: list(env.ADMIN_USERNAMES),
-    exportPlugins: list(env.EXPORT_PLUGINS ?? "skill"),
     publicBaseUrl: env.PUBLIC_BASE_URL || "http://localhost",
     sharePublicEnabled: bool(env.SHARE_PUBLIC_ENABLED, false),
     dailyTokenQuotaPerUser: num(env.DAILY_TOKEN_QUOTA_PER_USER, 2_000_000),

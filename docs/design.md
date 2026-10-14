@@ -140,6 +140,7 @@ all-in-flow/
 │   └── evals/                  # 模拟用户评测
 ├── plugins/
 │   ├── exporter-skill/         # Agent Skill 导出插件（一期）
+│   ├── exporter-prompt/        # 对话提示词导出插件
 │   └── exporter-n8n/           # n8n 导出插件（二期）
 ├── docker/nginx.conf
 ├── Dockerfile.server
@@ -564,7 +565,7 @@ interface ExporterPlugin<Options = unknown> {
 - `packages/workflow-ir` 只定义插件接口和注册表，不包含任何插件；
 - 每个插件是一个独立的 workspace 包，只依赖 `workflow-ir`，彼此之间没有依赖；
 - `apps/web` 在 `src/plugins.ts` 中静态导入所有插件，再按服务端下发的启用列表过滤；
-- 启用列表来自环境变量 `EXPORT_PLUGINS`（逗号分隔，默认 `skill`），通过 `/api/user/info` 返回。二期加管理页面在线开关；
+- 启用列表写在代码里（`apps/server/src/container.ts` 的 `ALL_EXPORTERS`），插件随代码发布，对所有用户开放，不再通过环境变量开关；插件元信息由 `/api/exporters` 返回；
 - 只支持代码仓库里经过 review 的插件，**不支持在线安装第三方插件**。
 
 #### 运行位置
@@ -992,7 +993,6 @@ SESSION_VERIFY_INTERVAL_SECONDS=300
 ADMIN_USERNAMES=
 
 # 导出插件
-EXPORT_PLUGINS=skill
 
 # 分享
 PUBLIC_BASE_URL=http://localhost
@@ -1097,7 +1097,7 @@ flowchart LR
 | IR 生成 | `apps/server/src/agent/irGenerator.ts` | Pro 模型输出 JSON，校验失败把错误反馈给模型，最多 3 次 |
 | SSE 对话 | `apps/server/src/routes/conversations.ts` | 文字增量、工具状态、画像更新、选择题、方案、工作流、用量；`done` 总是最后发出 |
 | 分享 | `routes/shares.ts`、`repos/shareRepo.ts` | 创建 / 列表 / 修改 / 撤销；访问校验（撤销、过期、会话删除统一 410）；复制到工作台 |
-| 导出 | `packages/workflow-ir`、`plugins/exporter-skill`、`apps/web/src/lib/exporters.ts` | 内置：PNG / SVG / Mermaid / Excalidraw；插件：Agent Skill（zip） |
+| 导出 | `packages/workflow-ir`、`plugins/exporter-skill`、`plugins/exporter-prompt`、`apps/web/src/lib/exporters.ts` | 内置：PNG / SVG / Mermaid / Excalidraw；插件：Agent Skill（zip）、对话提示词（.md） |
 | 前端 | `apps/web` | 登录、首页、工作台（对话 / 画布 / 工作画像）、导出菜单、分享弹窗、分享页 |
 | 评测框架 | `packages/evals`、`apps/server/src/eval` | 10 个人设（含隐藏痛点）；关键词召回、量化完整度、效率、IR 合法率、过早下结论；可用假模型端到端验证 |
 | 部署 | `Dockerfile.server`、`Dockerfile.web`、`docker-compose.yml`、`docker/nginx.conf` | 三容器；nginx 反向代理 `/api` 并关闭 SSE 缓冲；`/s/` 返回 `noindex` |
