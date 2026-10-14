@@ -3,6 +3,7 @@ import type { WorkflowIR } from "@aif/workflow-ir";
 import type { Scene } from "../lib/canvas";
 import * as ex from "../lib/exporters";
 import { ExportPreview, type ExportPreviewSpec } from "./ExportPreview";
+import { PromptExportPreview } from "./PromptExportPreview";
 
 export interface ExporterInfo { id: string; name: string; description: string; version: string }
 
@@ -10,9 +11,13 @@ export function ExportMenu({
   ir,
   scene,
   exporters,
+  workflowId,
+  onSaved,
   onClose,
 }: {
   ir: WorkflowIR;
+  workflowId?: string;
+  onSaved?: (version: number) => void;
   scene: Scene | null;
   exporters: ExporterInfo[];
   onClose: () => void;
@@ -20,6 +25,7 @@ export function ExportMenu({
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string; extra?: string[] } | null>(null);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<ExportPreviewSpec | null>(null);
+  const [promptOpen, setPromptOpen] = useState(false);
   const base = ir.slug;
 
   const run = async (fn: () => Promise<void>) => {
@@ -79,20 +85,7 @@ export function ExportMenu({
               </>
             )}
             {hasPrompt && (
-              <button className="mi" disabled={busy} onClick={() => run(async () => {
-                const r = await ex.exportPrompt(ir);
-                setPreview({
-                  title: "对话提示词预览",
-                  files: r.files,
-                  notes: [
-                    "完整版：直接粘贴到聊天窗口，或放进 ChatGPT Projects、Claude Projects 等可以写长指令的地方。精简版：2000 字以内，适合放进豆包智能体、Gemini Gem 等字数有限的设定。",
-                    ...r.requirements.map((q) => `使用前需要：${q}`),
-                    ...r.warnings.map((w) => `注意：${w}`),
-                  ],
-                  downloadLabel: "下载 .zip",
-                  onDownload: async () => ex.download(await ex.zipFiles(r.files), r.filename),
-                });
-              })}>
+              <button className="mi" disabled={busy} onClick={() => setPromptOpen(true)}>
                 <div className="ic">PT</div>
                 <div><b>Prompt 对话提示词</b><span>完整版与精简版，预览后直接复制，粘贴到聊天窗口或智能体设定里</span></div>
                 <span className="badge">插件</span>
@@ -122,6 +115,17 @@ export function ExportMenu({
           <button className="btn-ghost" onClick={onClose}>关闭</button>
         </div>
       </div>
+      {promptOpen && (
+        <PromptExportPreview
+          ir={ir}
+          workflowId={workflowId}
+          onSaved={onSaved}
+          onClose={() => {
+            setPromptOpen(false);
+            onClose();
+          }}
+        />
+      )}
       {preview && (
         <ExportPreview
           spec={preview}

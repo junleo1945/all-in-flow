@@ -124,6 +124,7 @@ function prepareNodes(nodes: WorkflowNode[], edges: WorkflowIR["edges"], ctx: Ct
     }
 
     const parts = [fillRefs(n.instructions, ctx)];
+    if (n.template) parts.push(`必须按用户确认的模板或格式输出：${fillRefs(n.template, ctx)}`);
     if (n.action?.kind === "llm") {
       const prompt = fillRefs(n.action.prompt, ctx);
       if (prompt && !parts[0]!.includes(prompt)) parts.push(`具体要求：${prompt}`);
@@ -161,20 +162,54 @@ function materials(ir: WorkflowIR, ctx: Ctx): string[] {
   return out;
 }
 
-/** 开始前要问清楚的事：判断标准、模板或输出格式 */
-function gaps(ir: WorkflowIR, ctx: Ctx): string[] {
-  const out: string[] = [];
+/** 导出前需要用户补充的内容：判断标准、模板或输出格式 */
+export interface PromptGap {
+  /** 对应的节点 id，补充内容按它写回工作流 */
+  nodeId: string;
+  kind: "criteria" | "template";
+  /** 节点标题，用于在表单里标明是哪一步 */
+  title: string;
+  /** 向用户提出的问题 */
+  question: string;
+}
+
+/** 找出所有缺口。已经补充过的（决策有判断标准、步骤有 template）不会再出现 */
+export function promptGaps(source: WorkflowIR): PromptGap[] {
+  const out: PromptGap[] = [];
   const visit = (list: WorkflowNode[], edges: WorkflowIR["edges"]) => {
     for (const n of list) {
       if (n.type === "foreach") visit(n.body.nodes, n.body.edges);
-      if (n.type === "decision" && !hasCriteria(n, edges)) out.push(`「${n.title}」的判断标准是什么？`);
-      if (n.type === "step" && /模板|模版|格式/.test(`${n.instructions}${n.action?.kind === "llm" ? n.action.prompt : ""}`)) {
-        out.push(`「${n.title}」用什么模板或输出格式？`);
+      if (n.type === "decision" && !hasCriteria(n, edges)) {
+        out.push({ nodeId: n.id, kind: "criteria", title: n.title, question: `「${n.title}」的判断标准是什么？` });
+      }
+      if (n.type === "step" && !n.template && /模板|模版|格式/.test(`${n.instructions}${n.action?.kind === "llm" ? n.action.prompt : ""}`)) {
+        out.push({ nodeId: n.id, kind: "template", title: n.title, question: `「${n.title}」用什么模板或输出格式？` });
       }
     }
   };
-  visit(ir.nodes, ir.edges);
+  visit(source.nodes, source.edges);
   return out;
+}
+
+/**
+ * 把用户补充的内容写回工作流（返回新对象，不修改原对象）：
+ * 判断标准写进决策节点的 question，模板写进步骤的 template。空白的回答被忽略。
+ */
+export function applyPromptAnswers(source: WorkflowIR, answers: Record<string, string>): WorkflowIR {
+  const patch = (list: WorkflowNode[]): WorkflowNode[] =>
+    list.map((n): WorkflowNode => {
+      const answer = answers[n.id]?.trim();
+      if (n.type === "foreach") return { ...n, body: { ...n.body, nodes: patch(n.body.nodes) } };
+      if (!answer) return n;
+      if (n.type === "decision") return { ...n, question: answer };
+      if (n.type === "step") return { ...n, template: answer };
+      return n;
+    });
+  return { ...source, nodes: patch(source.nodes) };
+}
+
+function gaps(ir: WorkflowIR): string[] {
+  return promptGaps(ir).map((g) => g.question);
 }
 
 /**
@@ -188,7 +223,9 @@ function shortenIr(ir: WorkflowIR): WorkflowIR {
       if (n.type !== "step") return n;
       if (stepTag(n) === USER_ACTION) return n;
       const first = n.instructions.split(/[。；]/)[0] ?? n.instructions;
-      return { ...n, instructions: first.length > 60 ? `${first.slice(0, 60)}…` : first, outputs: undefined };
+      const head = first.length > 60 ? `${first.slice(0, 60)}…` : first;
+      // 用户确认的模板是硬性要求，精简版里也要完整保留
+      return { ...n, instructions: n.template ? `${head}。必须按用户确认的模板或格式输出：${n.template}` : head, outputs: undefined };
     });
   return { ...ir, nodes: shorten(ir.nodes) };
 }
@@ -241,7 +278,7 @@ export function renderPrompt(source: WorkflowIR, options: PromptOptions = {}): s
   const base = source;
   const ctx = buildCtx(base);
   const ir = { ...base, nodes: prepareNodes(base.nodes, base.edges, ctx) };
-  const gapList = gaps(base, ctx);
+  const gapList = gaps(base);
   const materialList = materials(base, ctx);
   const short = variant === "short";
   const body = short ? shortenIr(ir) : ir;

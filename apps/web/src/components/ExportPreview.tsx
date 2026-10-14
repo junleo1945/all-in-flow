@@ -21,7 +21,7 @@ export interface ExportPreviewSpec {
  * 导出预览：多个文件时左侧是文件树，点击文件在右侧预览内容并可以单独复制。
  * 通过 portal 挂在 body 上，避免被导出菜单的定位和层级影响。
  */
-export function ExportPreview({ spec, onClose }: { spec: ExportPreviewSpec; onClose: () => void }) {
+export function ExportPreview({ spec, onClose, top }: { spec: ExportPreviewSpec; onClose: () => void; top?: ReactNode }) {
   const [active, setActive] = useState(spec.files[0]?.path ?? "");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -74,6 +74,7 @@ export function ExportPreview({ spec, onClose }: { spec: ExportPreviewSpec; onCl
             ))}
           </div>
         )}
+        {top}
         <div className={`ep-body${spec.files.length > 1 ? "" : " single"}`}>
           {spec.files.length > 1 && (
             <nav className="ep-tree" aria-label="文件列表">

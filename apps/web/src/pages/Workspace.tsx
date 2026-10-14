@@ -560,7 +560,18 @@ export default function WorkspacePage() {
               <div style={{ position: "relative" }} ref={exportWrapRef}>
                 <button className="btn btn-ink" disabled={!ir} onClick={() => setMenuOpen((v) => !v)}>导出 ▾</button>
                 {menuOpen && ir && (
-                  <ExportMenu ir={ir} scene={scene.scene} exporters={exporters} onClose={() => setMenuOpen(false)} />
+                  <ExportMenu
+                    ir={ir}
+                    scene={scene.scene}
+                    exporters={exporters}
+                    workflowId={selected?.workflowId}
+                    onSaved={(version) => {
+                      // 切到新版本：版本下拉里也要有它
+                      setVersions((vs) => (vs.includes(version) ? vs : [...vs, version].sort((x, y) => x - y)));
+                      setSelected((cur) => (cur ? { ...cur, version, latestVersion: version } : cur));
+                    }}
+                    onClose={() => setMenuOpen(false)}
+                  />
                 )}
               </div>
               <button className="panel-icon-btn" onClick={() => setPanelCollapsed(true)} aria-label="收起画布">{PANEL_ICON}</button>

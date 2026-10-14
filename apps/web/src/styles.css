@@ -377,6 +377,12 @@ table.tasks { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ep-bar .btn { height: 30px; padding: 0 12px; font-size: 13px; flex: none; }
 .ep-code { flex: 1; min-height: 0; margin: 0; padding: 12px 14px; overflow: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; background: var(--sheet); color: var(--ink); }
 .ep-empty { padding: 16px; }
+.ep-gaps { display: grid; gap: 8px; margin-bottom: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--sheet-2); max-height: 30vh; overflow: auto; }
+.ep-gaps-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+.ep-gap { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); }
+.ep-gap textarea { width: 100%; resize: vertical; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--sheet); color: var(--ink); font: inherit; font-size: 13px; }
+.ep-gap-actions { display: flex; justify-content: flex-end; }
+.ep-gap-actions .btn { height: 30px; padding: 0 12px; font-size: 13px; }
 .ep-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
 .ep-foot .notice-error { font-size: 12.5px; }
 @media (max-width: 640px) {

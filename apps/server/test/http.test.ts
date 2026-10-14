@@ -170,6 +170,23 @@ describe.skipIf(!url)("HTTP 端到端（假 ERP + 假模型 + 真实数据库）
     const missing = await api(`/api/workflows/${wf!.id}/versions/9`);
     expect(missing.status).toBe(404);
   });
+
+  it("保存新版本：校验通过后版本号加一，旧版本不变；不合法的内容被拒绝", async () => {
+    const [wf] = await db.insert(workflows).values({ conversationId: convId, userId: ERP_USER_ID, name: "测试", latestVersion: 1 }).returning();
+    await db.insert(workflowVersions).values({ workflowId: wf!.id, version: 1, ir: salesReport });
+    const ir = { ...salesReport, nodes: salesReport.nodes.map((n) => (n.type === "step" && n.id === "n4" ? { ...n, template: "三段式周报" } : n)) };
+    const saved = await (await api(`/api/workflows/${wf!.id}/versions`, { method: "POST", body: JSON.stringify({ ir }) })).json();
+    expect(saved.data.version).toBe(2);
+    const v2 = await (await api(`/api/workflows/${wf!.id}/versions/2`)).json();
+    expect(JSON.stringify(v2.data.ir)).toContain("三段式周报");
+    const v1 = await (await api(`/api/workflows/${wf!.id}/versions/1`)).json();
+    expect(JSON.stringify(v1.data.ir)).not.toContain("三段式周报");
+
+    const bad = await api(`/api/workflows/${wf!.id}/versions`, { method: "POST", body: JSON.stringify({ ir: { version: 2, nodes: [] } }) });
+    expect(bad.status).toBe(400);
+    const none = await api(`/api/workflows/${wf!.id}/versions`, { method: "POST", body: "{}" });
+    expect(none.status).toBe(400);
+  });
 });
 
 describe.skipIf(!url)("历史消息接口", () => {

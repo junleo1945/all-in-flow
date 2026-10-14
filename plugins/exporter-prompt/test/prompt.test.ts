@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FEATURE_LABELS, checkExport, lower, type WorkflowIR } from "@aif/workflow-ir";
 import { v2Sample } from "../../../packages/workflow-ir/test/fixtures-v2.js";
-import { promptExporter, renderPrompt } from "../src/index.js";
+import { applyPromptAnswers, promptExporter, promptGaps, renderPrompt } from "../src/index.js";
 
 const base = (over: Partial<WorkflowIR> = {}): WorkflowIR => ({
   version: 2,
@@ -233,5 +233,49 @@ describe("聊天场景操作说明 chatInstructions", () => {
   it("没有 chatInstructions（旧工作流）时保持原有行为", () => {
     const text = renderPrompt(withChat());
     expect(text).toContain("请你在ERP中完成：调用 ERP 查询订单");
+  });
+});
+
+describe("导出前补缺口", () => {
+  const gapFlow = (): WorkflowIR =>
+    base({
+      nodes: [
+        { id: "s", type: "start", title: "开始" },
+        { id: "d1", type: "decision", title: "有异常订单？", mode: "llm" },
+        { id: "n1", type: "step", title: "生成周报", executor: "llm", instructions: "按模板汇总销售额", action: { kind: "llm", prompt: "按模板生成周报" } },
+        { id: "e", type: "end", title: "结束" },
+      ],
+      edges: [
+        { from: "s", to: "d1" },
+        { from: "d1", to: "n1", label: "有" },
+        { from: "d1", to: "n1", label: "没有", default: true },
+        { from: "n1", to: "e" },
+      ],
+    });
+
+  it("列出判断标准和模板两类缺口，带上节点 id", () => {
+    const g = promptGaps(gapFlow());
+    expect(g.map((x) => [x.nodeId, x.kind])).toEqual([
+      ["d1", "criteria"],
+      ["n1", "template"],
+    ]);
+  });
+
+  it("补充后缺口消失，提示词不再要求先问，并把答案写进步骤", () => {
+    const ir = applyPromptAnswers(gapFlow(), { d1: "金额超过 1 万或状态为 abnormal", n1: "三段：本周销售额、环比、Top3 客户" });
+    expect(promptGaps(ir)).toEqual([]);
+    const full = renderPrompt(ir);
+    expect(full).not.toContain("开始前需要确认的事项");
+    expect(full).toContain("金额超过 1 万或状态为 abnormal");
+    expect(full).toContain("必须按用户确认的模板或格式输出：三段：本周销售额、环比、Top3 客户");
+    expect(renderPrompt(ir, { variant: "short" })).toContain("三段：本周销售额、环比、Top3 客户");
+  });
+
+  it("空白回答被忽略，原工作流不被修改", () => {
+    const src = gapFlow();
+    const ir = applyPromptAnswers(src, { d1: "   ", n1: "" });
+    expect(promptGaps(ir)).toHaveLength(2);
+    applyPromptAnswers(src, { n1: "模板" });
+    expect(promptGaps(src)).toHaveLength(2);
   });
 });
