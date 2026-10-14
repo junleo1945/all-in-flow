@@ -12,6 +12,7 @@ apps/web             React + Vite + Excalidraw（前端）
 packages/workflow-ir 工作流 IR、校验、Mermaid、导出插件接口
 packages/evals       评测人设与打分
 plugins/exporter-skill  Agent Skill 导出插件
+plugins/exporter-prompt 对话提示词导出插件（粘贴到聊天窗口使用）
 docker/              nginx 配置
 ```
 
@@ -38,10 +39,10 @@ pnpm --filter @aif/server dev          # API，端口 3000
 pnpm --filter @aif/web dev             # 前端，端口 5173（/api 代理到 3000）
 ```
 
-写入一份演示数据（画像、痛点、工作流 v1 和 v2），用于检查工作台、画布、导出和分享：
+写入一份演示数据（画像、痛点、工作流 v1 和 v2），用于检查工作台、画布、导出和分享。数据写入指定的真实账号，该账号需要先用 ERP 登录过一次：
 
 ```bash
-pnpm --filter @aif/server exec tsx scripts/seed-demo.ts
+SEED_USERNAME=<ERP 用户名> pnpm --filter @aif/server exec tsx scripts/seed-demo.ts
 ```
 
 ## 测试

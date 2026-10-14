@@ -2,6 +2,8 @@
  * 写入一份演示数据：用户 zhangsan 的一次访谈，包含画像、痛点和工作流（v1、v2）。
  * 用于在没有 DeepSeek Key 的环境里检查工作台、画布、导出和分享。
  * 用法：DATABASE_URL=... npx tsx scripts/seed-demo.ts
+ * 必须指定一个已经登录过的真实账号（用户记录由登录时从 ERP 创建），脚本不会创建任何用户：
+ *   SEED_USERNAME=<ERP 用户名> DATABASE_URL=... npx tsx scripts/seed-demo.ts
  */
 import { eq } from "drizzle-orm";
 import { createDb } from "../src/db/client.js";
@@ -18,11 +20,11 @@ if (!url) throw new Error("DATABASE_URL 未配置");
 await runMigrations(url);
 const { db, sql } = createDb(url);
 
-const USER_ID = 990001;
-await db.insert(users).values({ id: USER_ID, username: "zhangsan", displayName: "张三" }).onConflictDoUpdate({
-  target: users.id,
-  set: { username: "zhangsan", displayName: "张三" },
-});
+const username = process.env.SEED_USERNAME;
+if (!username) throw new Error("请用 SEED_USERNAME 指定要写入数据的真实账号（该账号需要先登录过一次）");
+const [user] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
+if (!user) throw new Error(`用户 ${username} 不存在，请先用该账号登录一次再运行`);
+const USER_ID = user.id;
 
 // 清掉这个用户之前的演示数据
 const old = await db.select({ id: conversations.id }).from(conversations).where(eq(conversations.userId, USER_ID));
