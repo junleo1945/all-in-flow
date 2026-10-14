@@ -22,13 +22,14 @@ a { color: inherit; }
 
 .page { min-height: 100vh; display: flex; flex-direction: column; }
 .topbar { height: 56px; flex: none; display: flex; align-items: center; gap: 18px; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--sheet); }
-.brand { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-weight: 900; font-size: 17px; text-decoration: none; }
-.user { margin-left: auto; display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 13px; }
+.brand { flex: none; white-space: nowrap; display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-weight: 900; font-size: 17px; text-decoration: none; }
+.user { margin-left: auto; flex: none; white-space: nowrap; display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 13px; }
 .logout { height: 26px; padding: 0 8px; border-radius: 6px; font-size: 12.5px; color: var(--ink-3); border: 1px solid var(--line); background: transparent; }
 .logout:hover { color: var(--ink); border-color: var(--ink-3); }
 .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: var(--paper); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
 .meter { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
 .meter .bar { width: 70px; height: 8px; margin-top: 0; flex: none; }
+@media (max-width: 960px) { .topbar .meter { display: none; } }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 8px; font-weight: 500; white-space: nowrap; }
 .btn-ink { background: var(--ink); color: var(--paper); }
 .btn-ink:hover:not(:disabled) { opacity: .88; }
