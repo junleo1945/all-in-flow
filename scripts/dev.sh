@@ -22,7 +22,6 @@ docker compose up -d --wait postgres
 export DATABASE_URL="postgres://${POSTGRES_USER:-aif}:${POSTGRES_PASSWORD:-aif}@localhost:${POSTGRES_PORT:-5433}/${POSTGRES_DB:-all_in_flow}"
 export PORT=3000
 export SESSION_COOKIE_SECURE=false
-export EXPORT_PLUGINS=skill,n8n
 export PUBLIC_BASE_URL=http://localhost:5173
 export MODELS_JSON_PATH="$ROOT/config/models.json"  # 必须是绝对路径，服务端在 apps/server 下启动
 export ATTACHMENT_DIR="$ROOT/.dev-uploads"

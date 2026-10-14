@@ -11,11 +11,11 @@ import { createIrGenerator } from "./agent/irGenerator.js";
 import { createSessionRegistry } from "./agent/registry.js";
 import { createApp } from "./app.js";
 import { skillExporter } from "@aif/plugin-exporter-skill";
-import { n8nExporter } from "@aif/plugin-exporter-n8n";
+import { promptExporter } from "@aif/plugin-exporter-prompt";
 import type { ExporterPlugin } from "@aif/workflow-ir";
 
-/** 所有内置导出插件；EXPORT_PLUGINS 决定哪些启用 */
-const ALL_EXPORTERS: ExporterPlugin<any>[] = [skillExporter, n8nExporter];
+/** 所有对用户开放的导出插件，随代码发布，不通过环境变量开关。n8n 插件尚未成熟，暂不开放 */
+const ALL_EXPORTERS: ExporterPlugin<any>[] = [skillExporter, promptExporter];
 
 /** 组装所有依赖。测试和正式启动共用这一份装配逻辑。 */
 export async function buildContainer(config: AppConfig, overrides: { agentModel?: any; workflowModel?: any; runtime?: any } = {}) {
@@ -74,7 +74,7 @@ export async function buildContainer(config: AppConfig, overrides: { agentModel?
     attachments,
     visionEnabled,
     config,
-    exporters: ALL_EXPORTERS.filter((p) => config.exportPlugins.includes(p.id)),
+    exporters: ALL_EXPORTERS,
   });
 
   return { app, db, sql, registry, auth };

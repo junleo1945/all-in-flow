@@ -12,6 +12,7 @@ RUN pnpm --filter @aif/workflow-ir build \
  && pnpm --filter @aif/integrations build \
  && pnpm --filter @aif/plugin-exporter-skill build \
  && pnpm --filter @aif/plugin-exporter-n8n build \
+ && pnpm --filter @aif/plugin-exporter-prompt build \
  && pnpm --filter @aif/web build
 
 FROM nginx:1.27-alpine AS runtime
