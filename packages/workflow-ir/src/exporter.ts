@@ -70,11 +70,6 @@ export class ExporterRegistry {
     return this;
   }
 
-  /** 只返回启用列表中的插件（EXPORT_PLUGINS） */
-  enabled(enabledIds: string[]): ExporterPlugin<any>[] {
-    return enabledIds.map((id) => this.plugins.get(id)).filter((p): p is ExporterPlugin<any> => !!p);
-  }
-
   get(id: string): ExporterPlugin<any> | undefined {
     return this.plugins.get(id);
   }
