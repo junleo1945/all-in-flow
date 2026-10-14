@@ -215,3 +215,23 @@ describe("对话提示词的质量：适配普通聊天窗口", () => {
     expect(md).toContain("需要的模板或格式缺失时，请用户给出");
   });
 });
+
+describe("聊天场景操作说明 chatInstructions", () => {
+  const withChat = (chat?: string): WorkflowIR => {
+    const ir = nested();
+    const n1 = ir.nodes.find((n) => n.id === "n1");
+    if (n1?.type === "step" && chat) n1.chatInstructions = chat;
+    return ir;
+  };
+
+  it("有 chatInstructions 时直接使用，不再拼接「调用…接口」式的说明", () => {
+    const text = renderPrompt(withChat("在 ERP 的订单查询里导出本周订单"));
+    expect(text).toContain("请你在 ERP 的订单查询里导出本周订单。请把");
+    expect(text).not.toContain("调用 ERP 查询订单");
+  });
+
+  it("没有 chatInstructions（旧工作流）时保持原有行为", () => {
+    const text = renderPrompt(withChat());
+    expect(text).toContain("请你在ERP中完成：调用 ERP 查询订单");
+  });
+});

@@ -118,7 +118,9 @@ function prepareNodes(nodes: WorkflowNode[], edges: WorkflowIR["edges"], ctx: Ct
     if (stepTag(n) === USER_ACTION) {
       const systemId = n.integration ?? (n.action?.kind === "integration" ? n.action.integration : undefined);
       const where = (systemId && ctx.systems.get(systemId)) || "相关系统";
-      return { ...n, instructions: `请你在${where}中完成：${fillRefs(n.instructions, ctx)}。请把${bringText(n, ctx)}粘贴到对话里，我再继续。`, outputs: undefined };
+      // 有专门写给聊天场景的说明就直接用（已经写明了在哪个系统做什么），否则退回到通用说明加系统名
+      const what = n.chatInstructions ? `请你${fillRefs(n.chatInstructions, ctx).replace(/[。.]$/, "")}` : `请你在${where}中完成：${fillRefs(n.instructions, ctx)}`;
+      return { ...n, instructions: `${what}。请把${bringText(n, ctx)}粘贴到对话里，我再继续。`, outputs: undefined };
     }
 
     const parts = [fillRefs(n.instructions, ctx)];
