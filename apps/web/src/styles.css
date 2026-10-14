@@ -352,3 +352,29 @@ table.tasks { width: 100%; border-collapse: collapse; font-size: 13px; }
 .panel-icon-btn:hover { background: var(--sheet-2); border-color: var(--line-2); color: var(--ink); }
 .panel-edge { position: absolute; right: 0; top: 10px; z-index: 5; width: 28px; height: 32px; display: grid; place-items: center; background: var(--sheet); border: 1px solid var(--line-2); border-right: 0; border-radius: 8px 0 0 8px; color: var(--ink-2); box-shadow: -2px 2px 8px rgba(28, 27, 24, .06); }
 .panel-edge:hover { background: var(--sheet-2); color: var(--ink); }
+
+/* 导出预览：左侧文件树，右侧内容 */
+.export-preview { width: min(960px, 100%); padding: 22px 24px 18px; }
+.export-preview h2 { margin-bottom: 10px; }
+.ep-notes { display: grid; gap: 6px; margin-bottom: 12px; }
+.ep-notes .req { margin: 0; }
+.ep-body { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 12px; height: min(62vh, 560px); min-height: 0; }
+.ep-body.single { grid-template-columns: minmax(0, 1fr); }
+.ep-tree { border: 1px solid var(--line); border-radius: 10px; background: var(--sheet-2); overflow: auto; padding: 6px; min-height: 0; }
+.ep-dir { font-family: var(--mono); font-size: 12px; color: var(--ink-3); padding: 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ep-file { display: block; width: 100%; padding: 5px 8px; border-radius: 6px; text-align: left; font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ep-file:hover { background: var(--sheet); }
+.ep-file.on { background: var(--sheet); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+.ep-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.ep-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--line); background: var(--sheet-2); }
+.ep-path { font-size: 12px; color: var(--ink-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-bar .btn { height: 30px; padding: 0 12px; font-size: 13px; flex: none; }
+.ep-code { flex: 1; min-height: 0; margin: 0; padding: 12px 14px; overflow: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; background: var(--sheet); color: var(--ink); }
+.ep-empty { padding: 16px; }
+.ep-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
+.ep-foot .notice-error { font-size: 12.5px; }
+@media (max-width: 640px) {
+  .ep-body { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .ep-tree { max-height: 160px; }
+  .ep-pane { height: 52vh; }
+}
