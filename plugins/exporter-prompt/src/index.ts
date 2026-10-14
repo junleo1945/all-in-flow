@@ -78,7 +78,9 @@ function humanCondition(c: Condition, ctx: Ctx): string {
   if ("all" in c) return c.all.map((x) => humanCondition(x, ctx)).join("，且");
   if ("any" in c) return c.any.map((x) => humanCondition(x, ctx)).join("，或");
   const left = refLabel(c.left, ctx);
-  const right = c.right !== undefined ? ` ${String(c.right)}` : "";
+  // 右侧通常是常量，但模型有时会把对另一个变量的引用（如 expense.invoice_amount）写在这里
+  const isRef = typeof c.right === "string" && /^[A-Za-z_]\w*\.[\w.]+$/.test(c.right) && (c.right.startsWith("input.") || ctx.items.has(c.right.split(".")[0]!) || ctx.nodes.has(c.right.split(".")[0]!));
+  const right = c.right !== undefined ? ` ${isRef ? refLabel(String(c.right), ctx) : String(c.right)}` : "";
   const ops: Record<string, string> = {
     eq: "等于",
     ne: "不等于",
@@ -140,7 +142,8 @@ function prepareNodes(nodes: WorkflowNode[], edges: WorkflowIR["edges"], ctx: Ct
       if (form?.length) parts.push(`请用户填写：${form.map((f) => `${f.label}${f.options?.length ? `（可选：${f.options.join("/")}）` : ""}`).join("、")}`);
       if (approval && !/确认|同意/.test(parts.join(""))) parts.push("请用户明确同意或拒绝");
     }
-    return { ...n, instructions: parts.join("。") };
+    // 各部分可能已经以句号结尾，去掉后再拼，避免出现「。。」
+    return { ...n, instructions: parts.map((x) => x.replace(/[。.]+\s*$/, "")).join("。") };
   });
 }
 

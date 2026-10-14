@@ -279,3 +279,43 @@ describe("导出前补缺口", () => {
     expect(promptGaps(src)).toHaveLength(2);
   });
 });
+
+describe("文字细节", () => {
+  it("说明以句号结尾时不会出现「。。」", () => {
+    const ir = base({
+      nodes: [
+        { id: "s", type: "start", title: "开始" },
+        { id: "n1", type: "step", title: "写报告", executor: "llm", instructions: "汇总数据生成报告。", action: { kind: "llm", prompt: "按要求写一份报告。" } },
+        { id: "e", type: "end", title: "结束" },
+      ],
+      edges: [
+        { from: "s", to: "n1" },
+        { from: "n1", to: "e" },
+      ],
+    });
+    expect(renderPrompt(ir)).not.toContain("。。");
+  });
+
+  it("条件右侧写成对变量的引用时，翻译成人话而不是原样输出", () => {
+    const withRef = base({
+      nodes: [
+        { id: "s", type: "start", title: "开始" },
+        { id: "d1", type: "decision", title: "金额一致？", mode: "expr" },
+        { id: "a", type: "step", title: "通过", executor: "llm", instructions: "登记通过", action: { kind: "llm", prompt: "登记通过" } },
+        { id: "b", type: "step", title: "驳回", executor: "llm", instructions: "登记驳回", action: { kind: "llm", prompt: "登记驳回" } },
+        { id: "e", type: "end", title: "结束" },
+      ],
+      edges: [
+        { from: "s", to: "d1" },
+        { from: "d1", to: "a", label: "一致", condition: { left: "input.amount", op: "eq", right: "input.invoice_amount" } },
+        { from: "d1", to: "b", label: "不一致", default: true },
+        { from: "a", to: "e" },
+        { from: "b", to: "e" },
+      ],
+      inputs: [{ name: "amount", type: "number", description: "金额", required: true }, { name: "invoice_amount", type: "number", description: "发票金额", required: true }],
+    });
+    const out = renderPrompt(withRef);
+    expect(out).toContain("等于 用户提供的「invoice_amount」");
+    expect(out).not.toContain("input.invoice_amount");
+  });
+});
