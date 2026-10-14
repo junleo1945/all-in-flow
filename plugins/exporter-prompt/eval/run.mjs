@@ -1,7 +1,7 @@
 // 提示词评测：用脚本模拟不同类型的用户，和真实模型按提示词对话，再用规则给每轮回复打分。
 //
 // 用法：
-//   node eval/run.mjs --out <报告目录> [--baseline <1.0 版提示词文件>] [--models deepseek-v4.1-flash,deepseek-v4-flash-0731]
+//   node eval/run.mjs --out <报告目录> [--baseline <1.0 版提示词文件>] [--models deepseek-v4.1-flash,deepseek-v4-flash-0731] [--fixture sales-weekly|sales-weekly-chat]
 // 密钥读取顺序：环境变量 DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL，否则从 ENV_FILE（默认主仓库的 .env）读取，不会打印出来。
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { spawn } from "node:child_process";
@@ -30,7 +30,7 @@ function loadEnv() {
 const env = loadEnv();
 const endpoint = `${(env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(/\/$/, "")}/chat/completions`;
 
-const ir = JSON.parse(readFileSync(resolve(here, "fixtures/sales-weekly.json"), "utf8"));
+const ir = JSON.parse(readFileSync(resolve(here, `fixtures/${args.fixture ?? "sales-weekly"}.json`), "utf8"));
 const variants = {
   "1.1-full": renderPrompt(ir, { variant: "full" }),
   "1.1-short": renderPrompt(ir, { variant: "short" }),
