@@ -162,6 +162,10 @@ const StepNodeSchema = z.object({
   executor: ExecutorSchema,
   integration: z.string().optional(),
   instructions: z.string().min(1),
+  /** 聊天场景下给用户看的操作说明（在哪个系统里点哪里、导出什么）；没有时导出器回退到 instructions */
+  chatInstructions: z.string().optional(),
+  /** 用户确认的输出模板或格式（例如周报的版式）；导出提示词时作为硬性要求写入，并免去再次询问 */
+  template: z.string().optional(),
   action: ActionSchema.optional(),
   /** 说明性的输入名，不参与引用解析；真正的数据依赖写在 action 的引用里 */
   inputs: z.array(z.string()).optional(),

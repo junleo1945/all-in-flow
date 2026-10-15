@@ -33,6 +33,7 @@ export function buildIrSystemPrompt(catalog: IntegrationEntry[] = INTEGRATION_CA
 - id：只含字母、数字、下划线，不能是 input 或 env。
 - type 只能是 start / step / decision / end / foreach / merge。每个流程（包括子流程）只有一个 start，至少一个 end。
 - step：必须有 executor、instructions（具体怎么做），以及 action（结构化的执行方式）；可以用 outputs 声明输出变量。
+- step 的 chatInstructions（可选）：当 executor 为 deterministic（调用接口、拉取数据等程序化步骤）时必须填写。这是在普通聊天窗口里让用户亲手完成这一步的说明，用用户看得懂的话写出「在哪个系统的哪个页面做什么」，例如「在 ERP 的订单查询里，把下单时间设为本周一 00:00 到现在，导出订单列表」。不要出现接口、API、字段、参数、调用等技术用语，也不要使用 {{}} 引用。其他 executor 不需要填写。
 - decision：mode 为 "expr" 时，每条出边都要有 label，并带 condition（left 为引用，op 为 eq/ne/gt/gte/lt/lte/contains/not_contains/empty/not_empty/is_true/is_false 之一，right 为常量），最后一条出边用 default: true 表示"其他情况"；mode 为 "llm" 时必须有 question（判断问题），input 可选（引用的内容）。判断依据能写成条件就用 expr，需要理解内容才能判断就用 llm。
 - foreach：对数组逐项执行子流程。over 是引用（如 "n1.orders"），必须指向 array 类型的变量；item 是当前元素的名字；body 是子流程，自带 start 和 end；outputs 可选。子流程内可以用 item 名引用当前元素（如 "order.id"）。
 - merge：并行分支汇合。只有方案明确需要并行时才使用。
@@ -56,10 +57,11 @@ ${operationList(catalog)}
 ## 质量要求
 - 方案中的每一个 step 都要有 action。拿不到数据的步骤（没有对应操作），executor 写 human，action 用 human 让用户提供数据，不要编造接口。
 - 每个 step 的 instructions 要具体到可以执行，不写空话。
+- deterministic 步骤的 chatInstructions 要让没有技术背景的人照着就能操作，不能只是 instructions 的改写。
 - 不要编造集成、接口、字段或操作。
 
 ## 示例（结构示意，内容需按方案填写）
-{"version":2,"kind":"automation","slug":"weekly-report","name":"周报汇总","description":"汇总本周数据生成周报。当用户需要写周报时使用。","trigger":{"type":"manual","detail":"用户主动要求时"},"inputs":[{"name":"week","type":"string","description":"周次","required":true}],"integrations":[{"id":"erp","name":"ERP","purpose":"拉取订单","access":"api"}],"nodes":[{"id":"s","type":"start","title":"开始"},{"id":"n1","type":"step","title":"拉取订单","executor":"deterministic","integration":"erp","instructions":"拉取本周订单","action":{"kind":"integration","integration":"erp","operation":"listOrders","params":{"start":"{{input.week}}","end":"{{input.week}}"}},"outputs":[{"name":"orders","type":"array","description":"订单列表"}]},{"id":"n2","type":"decision","title":"有异常订单？","mode":"llm","question":"订单中是否有异常？","input":"n1.orders"},{"id":"n4","type":"step","title":"人工确认异常","executor":"human","instructions":"列出异常订单，请用户确认是否计入","action":{"kind":"human","message":"请确认异常订单 {{n1.orders}} 是否计入","approval":true}},{"id":"n3","type":"step","title":"生成周报","executor":"llm","instructions":"汇总订单生成周报","action":{"kind":"llm","prompt":"根据 {{n1.orders}} 生成周报"}},{"id":"e","type":"end","title":"结束"}],"edges":[{"from":"s","to":"n1"},{"from":"n1","to":"n2"},{"from":"n2","to":"n4","label":"有异常"},{"from":"n4","to":"n3"},{"from":"n2","to":"n3","label":"没有","default":true},{"from":"n3","to":"e"}],"source":{"painPointIds":["p1"]}}`;
+{"version":2,"kind":"automation","slug":"weekly-report","name":"周报汇总","description":"汇总本周数据生成周报。当用户需要写周报时使用。","trigger":{"type":"manual","detail":"用户主动要求时"},"inputs":[{"name":"week","type":"string","description":"周次","required":true}],"integrations":[{"id":"erp","name":"ERP","purpose":"拉取订单","access":"api"}],"nodes":[{"id":"s","type":"start","title":"开始"},{"id":"n1","type":"step","title":"拉取订单","executor":"deterministic","integration":"erp","instructions":"拉取本周订单","chatInstructions":"在 ERP 的订单查询里，把下单时间设为本周一到现在，导出订单列表","action":{"kind":"integration","integration":"erp","operation":"listOrders","params":{"start":"{{input.week}}","end":"{{input.week}}"}},"outputs":[{"name":"orders","type":"array","description":"订单列表"}]},{"id":"n2","type":"decision","title":"有异常订单？","mode":"llm","question":"订单中是否有异常？","input":"n1.orders"},{"id":"n4","type":"step","title":"人工确认异常","executor":"human","instructions":"列出异常订单，请用户确认是否计入","action":{"kind":"human","message":"请确认异常订单 {{n1.orders}} 是否计入","approval":true}},{"id":"n3","type":"step","title":"生成周报","executor":"llm","instructions":"汇总订单生成周报","action":{"kind":"llm","prompt":"根据 {{n1.orders}} 生成周报"}},{"id":"e","type":"end","title":"结束"}],"edges":[{"from":"s","to":"n1"},{"from":"n1","to":"n2"},{"from":"n2","to":"n4","label":"有异常"},{"from":"n4","to":"n3"},{"from":"n2","to":"n3","label":"没有","default":true},{"from":"n3","to":"e"}],"source":{"painPointIds":["p1"]}}`;
 }
 
 export const IR_SYSTEM_PROMPT = buildIrSystemPrompt();

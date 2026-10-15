@@ -1,0 +1,274 @@
+{
+  "version": 2,
+  "kind": "automation",
+  "slug": "weekly-expense-check",
+  "name": "报销单每周核对",
+  "description": "逐条核对本周报销单的报销金额与发票金额是否一致，金额超过类别标准的请主管审批，最后生成核对结果表。当用户需要每周核对报销单时使用。",
+  "trigger": {
+    "type": "manual",
+    "detail": "用户主动要求核对本周报销单时"
+  },
+  "inputs": [
+    {
+      "name": "expense_list",
+      "type": "array",
+      "description": "本周报销单列表，每条包含单号、金额、发票金额、类别、类别标准金额",
+      "required": true
+    },
+    {
+      "name": "week",
+      "type": "string",
+      "description": "核对周次，例如 2025-W03",
+      "required": true
+    }
+  ],
+  "integrations": [],
+  "nodes": [
+    {
+      "id": "s",
+      "type": "start",
+      "title": "开始"
+    },
+    {
+      "id": "n_split",
+      "type": "foreach",
+      "title": "逐条核对报销单",
+      "over": "input.expense_list",
+      "item": "expense",
+      "body": {
+        "nodes": [
+          {
+            "id": "bs",
+            "type": "start",
+            "title": "子流程开始"
+          },
+          {
+            "id": "check_amount",
+            "type": "decision",
+            "title": "金额与发票金额一致？",
+            "mode": "expr"
+          },
+          {
+            "id": "need_approval",
+            "type": "decision",
+            "title": "超过类别标准？",
+            "mode": "expr"
+          },
+          {
+            "id": "submit_approval",
+            "type": "step",
+            "title": "请主管审批",
+            "executor": "human",
+            "instructions": "向主管说明报销单 {{expense.id}} 金额 {{expense.amount}} 超过类别 {{expense.category}} 标准 {{expense.category_limit}}，请主管同意或拒绝",
+            "action": {
+              "kind": "human",
+              "message": "报销单 {{expense.id}}（类别：{{expense.category}}，金额：{{expense.amount}}，标准：{{expense.category_limit}}）超出类别标准，请主管审批是否通过",
+              "approval": true
+            },
+            "outputs": [
+              {
+                "name": "approved",
+                "type": "boolean",
+                "description": "主管是否同意"
+              }
+            ]
+          },
+          {
+            "id": "approval_result",
+            "type": "decision",
+            "title": "主管是否同意？",
+            "mode": "expr"
+          },
+          {
+            "id": "reject_record",
+            "type": "step",
+            "title": "登记需补材料",
+            "executor": "llm",
+            "instructions": "根据报销单信息生成一条需补材料记录，说明报销金额与发票金额不一致的情况",
+            "action": {
+              "kind": "llm",
+              "prompt": "报销单 {{expense.id}} 的报销金额为 {{expense.amount}}，发票金额为 {{expense.invoice_amount}}，两者不一致。请生成一条核对结论，状态为“需补材料”，并说明差异金额与需要补充的材料。"
+            },
+            "outputs": [
+              {
+                "name": "result",
+                "type": "object",
+                "description": "核对结果记录"
+              }
+            ]
+          },
+          {
+            "id": "pass_record",
+            "type": "step",
+            "title": "登记通过",
+            "executor": "llm",
+            "instructions": "根据报销单信息生成一条通过记录",
+            "action": {
+              "kind": "llm",
+              "prompt": "报销单 {{expense.id}} 金额 {{expense.amount}}，发票金额 {{expense.invoice_amount}}，类别 {{expense.category}}，金额未超过类别标准。请生成一条核对结论，状态为“通过”。"
+            },
+            "outputs": [
+              {
+                "name": "result",
+                "type": "object",
+                "description": "核对结果记录"
+              }
+            ]
+          },
+          {
+            "id": "reject_record_2",
+            "type": "step",
+            "title": "登记被驳回",
+            "executor": "llm",
+            "instructions": "根据主管审批结果生成一条被驳回记录",
+            "action": {
+              "kind": "llm",
+              "prompt": "报销单 {{expense.id}} 金额 {{expense.amount}} 超过类别 {{expense.category}} 标准 {{expense.category_limit}}，主管未同意。请生成一条核对结论，状态为“被驳回”。"
+            },
+            "outputs": [
+              {
+                "name": "result",
+                "type": "object",
+                "description": "核对结果记录"
+              }
+            ]
+          },
+          {
+            "id": "be",
+            "type": "end",
+            "title": "子流程结束"
+          }
+        ],
+        "edges": [
+          {
+            "from": "bs",
+            "to": "check_amount"
+          },
+          {
+            "from": "check_amount",
+            "to": "need_approval",
+            "label": "一致",
+            "condition": {
+              "left": "expense.amount",
+              "op": "eq",
+              "right": "expense.invoice_amount"
+            }
+          },
+          {
+            "from": "check_amount",
+            "to": "reject_record",
+            "label": "不一致",
+            "condition": {
+              "left": "expense.amount",
+              "op": "ne",
+              "right": "expense.invoice_amount"
+            }
+          },
+          {
+            "from": "reject_record",
+            "to": "be"
+          },
+          {
+            "from": "need_approval",
+            "to": "submit_approval",
+            "label": "超过标准",
+            "condition": {
+              "left": "expense.amount",
+              "op": "gt",
+              "right": "expense.category_limit"
+            }
+          },
+          {
+            "from": "need_approval",
+            "to": "pass_record",
+            "label": "未超标准",
+            "condition": {
+              "left": "expense.amount",
+              "op": "lte",
+              "right": "expense.category_limit"
+            }
+          },
+          {
+            "from": "pass_record",
+            "to": "be"
+          },
+          {
+            "from": "submit_approval",
+            "to": "approval_result"
+          },
+          {
+            "from": "approval_result",
+            "to": "reject_record_2",
+            "label": "未同意",
+            "condition": {
+              "left": "submit_approval.approved",
+              "op": "is_false",
+              "right": ""
+            }
+          },
+          {
+            "from": "approval_result",
+            "to": "pass_record",
+            "label": "同意",
+            "condition": {
+              "left": "submit_approval.approved",
+              "op": "is_true",
+              "right": ""
+            }
+          },
+          {
+            "from": "reject_record_2",
+            "to": "be"
+          }
+        ]
+      },
+      "outputs": [
+        {
+          "name": "results",
+          "type": "array",
+          "description": "核对结果列表"
+        }
+      ]
+    },
+    {
+      "id": "n_report",
+      "type": "step",
+      "title": "生成核对结果表",
+      "executor": "llm",
+      "instructions": "把逐条核对的结果整理成一张核对结果表，分为通过、需补材料、被驳回三类，列出单号、金额、发票金额、类别、状态与说明",
+      "action": {
+        "kind": "llm",
+        "prompt": "根据核对结果 {{n_split.results}} 生成 {{input.week}} 的报销单核对结果表，按状态分为“通过”“需补材料”“被驳回”三组，逐条列出单号、金额、发票金额、类别和说明。"
+      },
+      "outputs": [
+        {
+          "name": "report",
+          "type": "string",
+          "description": "核对结果表"
+        }
+      ]
+    },
+    {
+      "id": "e",
+      "type": "end",
+      "title": "结束"
+    }
+  ],
+  "edges": [
+    {
+      "from": "s",
+      "to": "n_split"
+    },
+    {
+      "from": "n_split",
+      "to": "n_report"
+    },
+    {
+      "from": "n_report",
+      "to": "e"
+    }
+  ],
+  "source": {
+    "painPointIds": []
+  }
+}

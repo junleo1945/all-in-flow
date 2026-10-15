@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FEATURE_LABELS, checkExport, lower, type WorkflowIR } from "@aif/workflow-ir";
 import { v2Sample } from "../../../packages/workflow-ir/test/fixtures-v2.js";
-import { promptExporter, renderPrompt } from "../src/index.js";
+import { applyPromptAnswers, promptExporter, promptGaps, renderPrompt } from "../src/index.js";
 
 const base = (over: Partial<WorkflowIR> = {}): WorkflowIR => ({
   version: 2,
@@ -213,5 +213,109 @@ describe("对话提示词的质量：适配普通聊天窗口", () => {
     expect(md).toContain("用户没有提供的数据不要假设或补全");
     expect(md).toContain("分批发送");
     expect(md).toContain("需要的模板或格式缺失时，请用户给出");
+  });
+});
+
+describe("聊天场景操作说明 chatInstructions", () => {
+  const withChat = (chat?: string): WorkflowIR => {
+    const ir = nested();
+    const n1 = ir.nodes.find((n) => n.id === "n1");
+    if (n1?.type === "step" && chat) n1.chatInstructions = chat;
+    return ir;
+  };
+
+  it("有 chatInstructions 时直接使用，不再拼接「调用…接口」式的说明", () => {
+    const text = renderPrompt(withChat("在 ERP 的订单查询里导出本周订单"));
+    expect(text).toContain("请你在 ERP 的订单查询里导出本周订单。请把");
+    expect(text).not.toContain("调用 ERP 查询订单");
+  });
+
+  it("没有 chatInstructions（旧工作流）时保持原有行为", () => {
+    const text = renderPrompt(withChat());
+    expect(text).toContain("请你在ERP中完成：调用 ERP 查询订单");
+  });
+});
+
+describe("导出前补缺口", () => {
+  const gapFlow = (): WorkflowIR =>
+    base({
+      nodes: [
+        { id: "s", type: "start", title: "开始" },
+        { id: "d1", type: "decision", title: "有异常订单？", mode: "llm" },
+        { id: "n1", type: "step", title: "生成周报", executor: "llm", instructions: "按模板汇总销售额", action: { kind: "llm", prompt: "按模板生成周报" } },
+        { id: "e", type: "end", title: "结束" },
+      ],
+      edges: [
+        { from: "s", to: "d1" },
+        { from: "d1", to: "n1", label: "有" },
+        { from: "d1", to: "n1", label: "没有", default: true },
+        { from: "n1", to: "e" },
+      ],
+    });
+
+  it("列出判断标准和模板两类缺口，带上节点 id", () => {
+    const g = promptGaps(gapFlow());
+    expect(g.map((x) => [x.nodeId, x.kind])).toEqual([
+      ["d1", "criteria"],
+      ["n1", "template"],
+    ]);
+  });
+
+  it("补充后缺口消失，提示词不再要求先问，并把答案写进步骤", () => {
+    const ir = applyPromptAnswers(gapFlow(), { d1: "金额超过 1 万或状态为 abnormal", n1: "三段：本周销售额、环比、Top3 客户" });
+    expect(promptGaps(ir)).toEqual([]);
+    const full = renderPrompt(ir);
+    expect(full).not.toContain("开始前需要确认的事项");
+    expect(full).toContain("金额超过 1 万或状态为 abnormal");
+    expect(full).toContain("必须按用户确认的模板或格式输出：三段：本周销售额、环比、Top3 客户");
+    expect(renderPrompt(ir, { variant: "short" })).toContain("三段：本周销售额、环比、Top3 客户");
+  });
+
+  it("空白回答被忽略，原工作流不被修改", () => {
+    const src = gapFlow();
+    const ir = applyPromptAnswers(src, { d1: "   ", n1: "" });
+    expect(promptGaps(ir)).toHaveLength(2);
+    applyPromptAnswers(src, { n1: "模板" });
+    expect(promptGaps(src)).toHaveLength(2);
+  });
+});
+
+describe("文字细节", () => {
+  it("说明以句号结尾时不会出现「。。」", () => {
+    const ir = base({
+      nodes: [
+        { id: "s", type: "start", title: "开始" },
+        { id: "n1", type: "step", title: "写报告", executor: "llm", instructions: "汇总数据生成报告。", action: { kind: "llm", prompt: "按要求写一份报告。" } },
+        { id: "e", type: "end", title: "结束" },
+      ],
+      edges: [
+        { from: "s", to: "n1" },
+        { from: "n1", to: "e" },
+      ],
+    });
+    expect(renderPrompt(ir)).not.toContain("。。");
+  });
+
+  it("条件右侧写成对变量的引用时，翻译成人话而不是原样输出", () => {
+    const withRef = base({
+      nodes: [
+        { id: "s", type: "start", title: "开始" },
+        { id: "d1", type: "decision", title: "金额一致？", mode: "expr" },
+        { id: "a", type: "step", title: "通过", executor: "llm", instructions: "登记通过", action: { kind: "llm", prompt: "登记通过" } },
+        { id: "b", type: "step", title: "驳回", executor: "llm", instructions: "登记驳回", action: { kind: "llm", prompt: "登记驳回" } },
+        { id: "e", type: "end", title: "结束" },
+      ],
+      edges: [
+        { from: "s", to: "d1" },
+        { from: "d1", to: "a", label: "一致", condition: { left: "input.amount", op: "eq", right: "input.invoice_amount" } },
+        { from: "d1", to: "b", label: "不一致", default: true },
+        { from: "a", to: "e" },
+        { from: "b", to: "e" },
+      ],
+      inputs: [{ name: "amount", type: "number", description: "金额", required: true }, { name: "invoice_amount", type: "number", description: "发票金额", required: true }],
+    });
+    const out = renderPrompt(withRef);
+    expect(out).toContain("等于 用户提供的「invoice_amount」");
+    expect(out).not.toContain("input.invoice_amount");
   });
 });

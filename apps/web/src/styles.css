@@ -22,13 +22,14 @@ a { color: inherit; }
 
 .page { min-height: 100vh; display: flex; flex-direction: column; }
 .topbar { height: 56px; flex: none; display: flex; align-items: center; gap: 18px; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--sheet); }
-.brand { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-weight: 900; font-size: 17px; text-decoration: none; }
-.user { margin-left: auto; display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 13px; }
+.brand { flex: none; white-space: nowrap; display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-weight: 900; font-size: 17px; text-decoration: none; }
+.user { margin-left: auto; flex: none; white-space: nowrap; display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 13px; }
 .logout { height: 26px; padding: 0 8px; border-radius: 6px; font-size: 12.5px; color: var(--ink-3); border: 1px solid var(--line); background: transparent; }
 .logout:hover { color: var(--ink); border-color: var(--ink-3); }
 .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: var(--paper); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
 .meter { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
 .meter .bar { width: 70px; height: 8px; margin-top: 0; flex: none; }
+@media (max-width: 960px) { .topbar .meter { display: none; } }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 8px; font-weight: 500; white-space: nowrap; }
 .btn-ink { background: var(--ink); color: var(--paper); }
 .btn-ink:hover:not(:disabled) { opacity: .88; }
@@ -376,6 +377,12 @@ table.tasks { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ep-bar .btn { height: 30px; padding: 0 12px; font-size: 13px; flex: none; }
 .ep-code { flex: 1; min-height: 0; margin: 0; padding: 12px 14px; overflow: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; background: var(--sheet); color: var(--ink); }
 .ep-empty { padding: 16px; }
+.ep-gaps { display: grid; gap: 8px; margin-bottom: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--sheet-2); max-height: 30vh; overflow: auto; }
+.ep-gaps-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+.ep-gap { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); }
+.ep-gap textarea { width: 100%; resize: vertical; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--sheet); color: var(--ink); font: inherit; font-size: 13px; }
+.ep-gap-actions { display: flex; justify-content: flex-end; }
+.ep-gap-actions .btn { height: 30px; padding: 0 12px; font-size: 13px; }
 .ep-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
 .ep-foot .notice-error { font-size: 12.5px; }
 @media (max-width: 640px) {

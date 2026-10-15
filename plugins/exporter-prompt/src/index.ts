@@ -78,7 +78,9 @@ function humanCondition(c: Condition, ctx: Ctx): string {
   if ("all" in c) return c.all.map((x) => humanCondition(x, ctx)).join("，且");
   if ("any" in c) return c.any.map((x) => humanCondition(x, ctx)).join("，或");
   const left = refLabel(c.left, ctx);
-  const right = c.right !== undefined ? ` ${String(c.right)}` : "";
+  // 右侧通常是常量，但模型有时会把对另一个变量的引用（如 expense.invoice_amount）写在这里
+  const isRef = typeof c.right === "string" && /^[A-Za-z_]\w*\.[\w.]+$/.test(c.right) && (c.right.startsWith("input.") || ctx.items.has(c.right.split(".")[0]!) || ctx.nodes.has(c.right.split(".")[0]!));
+  const right = c.right !== undefined ? ` ${isRef ? refLabel(String(c.right), ctx) : String(c.right)}` : "";
   const ops: Record<string, string> = {
     eq: "等于",
     ne: "不等于",
@@ -118,10 +120,13 @@ function prepareNodes(nodes: WorkflowNode[], edges: WorkflowIR["edges"], ctx: Ct
     if (stepTag(n) === USER_ACTION) {
       const systemId = n.integration ?? (n.action?.kind === "integration" ? n.action.integration : undefined);
       const where = (systemId && ctx.systems.get(systemId)) || "相关系统";
-      return { ...n, instructions: `请你在${where}中完成：${fillRefs(n.instructions, ctx)}。请把${bringText(n, ctx)}粘贴到对话里，我再继续。`, outputs: undefined };
+      // 有专门写给聊天场景的说明就直接用（已经写明了在哪个系统做什么），否则退回到通用说明加系统名
+      const what = n.chatInstructions ? `请你${fillRefs(n.chatInstructions, ctx).replace(/[。.]$/, "")}` : `请你在${where}中完成：${fillRefs(n.instructions, ctx)}`;
+      return { ...n, instructions: `${what}。请把${bringText(n, ctx)}粘贴到对话里，我再继续。`, outputs: undefined };
     }
 
     const parts = [fillRefs(n.instructions, ctx)];
+    if (n.template) parts.push(`必须按用户确认的模板或格式输出：${fillRefs(n.template, ctx)}`);
     if (n.action?.kind === "llm") {
       const prompt = fillRefs(n.action.prompt, ctx);
       if (prompt && !parts[0]!.includes(prompt)) parts.push(`具体要求：${prompt}`);
@@ -137,7 +142,8 @@ function prepareNodes(nodes: WorkflowNode[], edges: WorkflowIR["edges"], ctx: Ct
       if (form?.length) parts.push(`请用户填写：${form.map((f) => `${f.label}${f.options?.length ? `（可选：${f.options.join("/")}）` : ""}`).join("、")}`);
       if (approval && !/确认|同意/.test(parts.join(""))) parts.push("请用户明确同意或拒绝");
     }
-    return { ...n, instructions: parts.join("。") };
+    // 各部分可能已经以句号结尾，去掉后再拼，避免出现「。。」
+    return { ...n, instructions: parts.map((x) => x.replace(/[。.]+\s*$/, "")).join("。") };
   });
 }
 
@@ -159,20 +165,54 @@ function materials(ir: WorkflowIR, ctx: Ctx): string[] {
   return out;
 }
 
-/** 开始前要问清楚的事：判断标准、模板或输出格式 */
-function gaps(ir: WorkflowIR, ctx: Ctx): string[] {
-  const out: string[] = [];
+/** 导出前需要用户补充的内容：判断标准、模板或输出格式 */
+export interface PromptGap {
+  /** 对应的节点 id，补充内容按它写回工作流 */
+  nodeId: string;
+  kind: "criteria" | "template";
+  /** 节点标题，用于在表单里标明是哪一步 */
+  title: string;
+  /** 向用户提出的问题 */
+  question: string;
+}
+
+/** 找出所有缺口。已经补充过的（决策有判断标准、步骤有 template）不会再出现 */
+export function promptGaps(source: WorkflowIR): PromptGap[] {
+  const out: PromptGap[] = [];
   const visit = (list: WorkflowNode[], edges: WorkflowIR["edges"]) => {
     for (const n of list) {
       if (n.type === "foreach") visit(n.body.nodes, n.body.edges);
-      if (n.type === "decision" && !hasCriteria(n, edges)) out.push(`「${n.title}」的判断标准是什么？`);
-      if (n.type === "step" && /模板|模版|格式/.test(`${n.instructions}${n.action?.kind === "llm" ? n.action.prompt : ""}`)) {
-        out.push(`「${n.title}」用什么模板或输出格式？`);
+      if (n.type === "decision" && !hasCriteria(n, edges)) {
+        out.push({ nodeId: n.id, kind: "criteria", title: n.title, question: `「${n.title}」的判断标准是什么？` });
+      }
+      if (n.type === "step" && !n.template && /模板|模版|格式/.test(`${n.instructions}${n.action?.kind === "llm" ? n.action.prompt : ""}`)) {
+        out.push({ nodeId: n.id, kind: "template", title: n.title, question: `「${n.title}」用什么模板或输出格式？` });
       }
     }
   };
-  visit(ir.nodes, ir.edges);
+  visit(source.nodes, source.edges);
   return out;
+}
+
+/**
+ * 把用户补充的内容写回工作流（返回新对象，不修改原对象）：
+ * 判断标准写进决策节点的 question，模板写进步骤的 template。空白的回答被忽略。
+ */
+export function applyPromptAnswers(source: WorkflowIR, answers: Record<string, string>): WorkflowIR {
+  const patch = (list: WorkflowNode[]): WorkflowNode[] =>
+    list.map((n): WorkflowNode => {
+      const answer = answers[n.id]?.trim();
+      if (n.type === "foreach") return { ...n, body: { ...n.body, nodes: patch(n.body.nodes) } };
+      if (!answer) return n;
+      if (n.type === "decision") return { ...n, question: answer };
+      if (n.type === "step") return { ...n, template: answer };
+      return n;
+    });
+  return { ...source, nodes: patch(source.nodes) };
+}
+
+function gaps(ir: WorkflowIR): string[] {
+  return promptGaps(ir).map((g) => g.question);
 }
 
 /**
@@ -186,7 +226,9 @@ function shortenIr(ir: WorkflowIR): WorkflowIR {
       if (n.type !== "step") return n;
       if (stepTag(n) === USER_ACTION) return n;
       const first = n.instructions.split(/[。；]/)[0] ?? n.instructions;
-      return { ...n, instructions: first.length > 60 ? `${first.slice(0, 60)}…` : first, outputs: undefined };
+      const head = first.length > 60 ? `${first.slice(0, 60)}…` : first;
+      // 用户确认的模板是硬性要求，精简版里也要完整保留
+      return { ...n, instructions: n.template ? `${head}。必须按用户确认的模板或格式输出：${n.template}` : head, outputs: undefined };
     });
   return { ...ir, nodes: shorten(ir.nodes) };
 }
@@ -220,15 +262,17 @@ const CONVENTIONS_FULL = [
   "用户没有提供的数据不要假设或补全；需要的模板或格式缺失时，请用户给出，或先给一个简单格式请他确认。",
   "用户粘贴的数据很长或格式不清楚时，先请用户确认结构，或分批发送。",
   "某一步无法完成时，停下来说明原因，不要跳过。",
+  "即使用户说没有数据、让你编示例，或催你跳步、直接要结果，也不要编造数据，不要用虚构的内容完成步骤，更不要替用户做〔需要确认〕的决定。说明需要真实数据，告诉他去哪里拿；他只是想了解流程时，可以口头说明每一步会做什么，但不要生成示例结果。",
 ];
 
 const CONVENTIONS_SHORT = [
-  "一次只推进一步，每次回复开头标明当前进度，格式如「当前：第 2 步」。",
+  "一次只推进一步。每一条回复（包括追问和确认）都必须以「当前：第 N 步」开头，没有例外。",
   `${USER_ACTION}的步骤请用户操作后贴回结果；${CONFIRM}的步骤必须等用户明确回复。不编造数据。`,
   "把技术用语翻译成用户能在系统里找到的操作。",
   "判断标准没写明时，给 2 到 3 个建议口径请用户选；用户说「你定」就给一个推荐并请他确认。",
-  "开始时把待确认的事项合并成一条消息问完；之后每条回复最多只问一个问题。",
+  "开场消息里把「开始前需要确认的事项」和第 1 步所需的输入合并，一次问完；之后每条回复最多只问一个问题，不要连问。",
   "无法完成的步骤说明原因，不要跳过。",
+  "用户没有数据、让你编示例或催你跳步时，也不要编造数据，不要替用户做确认：说明需要真实数据并告诉他去哪里拿。",
 ];
 
 /**
@@ -239,7 +283,7 @@ export function renderPrompt(source: WorkflowIR, options: PromptOptions = {}): s
   const base = source;
   const ctx = buildCtx(base);
   const ir = { ...base, nodes: prepareNodes(base.nodes, base.edges, ctx) };
-  const gapList = gaps(base, ctx);
+  const gapList = gaps(base);
   const materialList = materials(base, ctx);
   const short = variant === "short";
   const body = short ? shortenIr(ir) : ir;

@@ -1,0 +1,291 @@
+{
+  "version": 2,
+  "kind": "automation",
+  "slug": "resume-screening",
+  "name": "简历初筛",
+  "description": "根据岗位要求逐份评估简历匹配度，分为通过、待定、淘汰三类，并为通过的候选人生成面试邀请话术。当用户需要批量初筛简历时使用。",
+  "trigger": {
+    "type": "manual",
+    "detail": "用户提供岗位要求与简历文本后主动触发"
+  },
+  "inputs": [
+    {
+      "name": "job_requirement",
+      "type": "string",
+      "description": "岗位要求描述",
+      "required": true
+    },
+    {
+      "name": "resume_list",
+      "type": "array",
+      "description": "候选人简历文本列表，每项包含 name 和 text",
+      "required": true
+    }
+  ],
+  "integrations": [],
+  "nodes": [
+    {
+      "id": "s",
+      "type": "start",
+      "title": "开始"
+    },
+    {
+      "id": "n1",
+      "type": "foreach",
+      "title": "逐份评估简历",
+      "over": "input.resume_list",
+      "item": "resume",
+      "body": {
+        "nodes": [
+          {
+            "id": "b_s",
+            "type": "start",
+            "title": "开始"
+          },
+          {
+            "id": "b1",
+            "type": "step",
+            "title": "评估匹配度",
+            "executor": "llm",
+            "instructions": "阅读该候选人的简历文本，对照岗位要求逐条比对，判断匹配度并给出等级：通过、待定或淘汰，同时写明理由。",
+            "action": {
+              "kind": "llm",
+              "prompt": "岗位要求：{{input.job_requirement}}\n\n候选人姓名：{{resume.name}}\n简历内容：{{resume.text}}\n\n请对照岗位要求评估该候选人的匹配度，输出等级（通过/待定/淘汰）、匹配要点和主要差距。"
+            },
+            "outputs": [
+              {
+                "name": "level",
+                "type": "string",
+                "description": "评估等级：通过/待定/淘汰"
+              },
+              {
+                "name": "reason",
+                "type": "string",
+                "description": "评估理由"
+              }
+            ]
+          },
+          {
+            "id": "b2",
+            "type": "decision",
+            "title": "是否淘汰",
+            "mode": "expr",
+            "question": "该候选人是否淘汰"
+          },
+          {
+            "id": "b3",
+            "type": "step",
+            "title": "记录淘汰",
+            "executor": "llm",
+            "instructions": "把该候选人归入淘汰名单，并简述淘汰原因。",
+            "action": {
+              "kind": "llm",
+              "prompt": "候选人 {{resume.name}} 被淘汰，原因是：{{b1.reason}}。请整理为一条淘汰记录，包含姓名和淘汰原因。"
+            },
+            "outputs": [
+              {
+                "name": "rejected_item",
+                "type": "string",
+                "description": "淘汰记录"
+              }
+            ]
+          },
+          {
+            "id": "b4",
+            "type": "decision",
+            "title": "是否通过",
+            "mode": "expr",
+            "question": "该候选人是否通过"
+          },
+          {
+            "id": "b5",
+            "type": "step",
+            "title": "记录通过",
+            "executor": "llm",
+            "instructions": "把该候选人归入通过名单，并简述通过理由。",
+            "action": {
+              "kind": "llm",
+              "prompt": "候选人 {{resume.name}} 通过初筛，理由是：{{b1.reason}}。请整理为一条通过记录，包含姓名和通过理由。"
+            },
+            "outputs": [
+              {
+                "name": "passed_item",
+                "type": "string",
+                "description": "通过记录"
+              }
+            ]
+          },
+          {
+            "id": "b6",
+            "type": "step",
+            "title": "记录待定",
+            "executor": "llm",
+            "instructions": "把该候选人归入待定名单，并说明待定原因与需要进一步确认的点。",
+            "action": {
+              "kind": "llm",
+              "prompt": "候选人 {{resume.name}} 处于待定，原因是：{{b1.reason}}。请整理为一条待定记录，包含姓名、待定原因和需要补充确认的信息。"
+            },
+            "outputs": [
+              {
+                "name": "pending_item",
+                "type": "string",
+                "description": "待定记录"
+              }
+            ]
+          },
+          {
+            "id": "b_e",
+            "type": "end",
+            "title": "结束"
+          }
+        ],
+        "edges": [
+          {
+            "from": "b_s",
+            "to": "b1"
+          },
+          {
+            "from": "b1",
+            "to": "b2"
+          },
+          {
+            "from": "b2",
+            "to": "b3",
+            "label": "淘汰",
+            "condition": {
+              "left": "b1.level",
+              "op": "eq",
+              "right": "淘汰"
+            }
+          },
+          {
+            "from": "b3",
+            "to": "b_e"
+          },
+          {
+            "from": "b2",
+            "to": "b4",
+            "label": "非淘汰",
+            "default": true
+          },
+          {
+            "from": "b4",
+            "to": "b5",
+            "label": "通过",
+            "condition": {
+              "left": "b1.level",
+              "op": "eq",
+              "right": "通过"
+            }
+          },
+          {
+            "from": "b5",
+            "to": "b_e"
+          },
+          {
+            "from": "b4",
+            "to": "b6",
+            "label": "其他",
+            "default": true
+          },
+          {
+            "from": "b6",
+            "to": "b_e"
+          }
+        ]
+      },
+      "outputs": [
+        {
+          "name": "evaluations",
+          "type": "array",
+          "description": "每份简历的评估结果"
+        }
+      ]
+    },
+    {
+      "id": "n2",
+      "type": "step",
+      "title": "汇总分类名单",
+      "executor": "llm",
+      "instructions": "根据每份简历的评估结果，汇总成通过、待定、淘汰三类名单，逐人列出姓名与理由。",
+      "action": {
+        "kind": "llm",
+        "prompt": "根据以下逐份评估结果，整理出通过、待定、淘汰三类名单，每类列出候选人姓名和对应理由：\n{{n1.evaluations}}"
+      },
+      "outputs": [
+        {
+          "name": "classification",
+          "type": "string",
+          "description": "三类名单汇总"
+        },
+        {
+          "name": "passed_list",
+          "type": "array",
+          "description": "通过候选人列表"
+        }
+      ]
+    },
+    {
+      "id": "n3",
+      "type": "step",
+      "title": "生成面试邀请话术",
+      "executor": "llm",
+      "instructions": "为每一位通过初筛的候选人生成个性化的面试邀请话术，包含问候、岗位说明、面试安排询问和联系方式。",
+      "action": {
+        "kind": "llm",
+        "prompt": "岗位要求：{{input.job_requirement}}\n通过初筛的候选人：{{n2.passed_list}}\n\n请为每一位通过初筛的候选人生成一段面试邀请话术，语气专业友好，包含问候、对其背景的肯定、岗位名称、邀请确认面试时间以及联系方式。"
+      },
+      "outputs": [
+        {
+          "name": "invitation_messages",
+          "type": "string",
+          "description": "每位通过候选人的面试邀请话术"
+        }
+      ]
+    },
+    {
+      "id": "n4",
+      "type": "step",
+      "title": "人工复核结果",
+      "executor": "human",
+      "instructions": "把三类名单和面试邀请话术提交给招聘专员确认，如有调整由专员指出。",
+      "action": {
+        "kind": "human",
+        "message": "请复核以下初筛结果：\n\n分类名单：{{n2.classification}}\n\n面试邀请话术：{{n3.invitation_messages}}\n\n确认无误或指出需要调整的地方。",
+        "approval": true
+      }
+    },
+    {
+      "id": "e",
+      "type": "end",
+      "title": "结束"
+    }
+  ],
+  "edges": [
+    {
+      "from": "s",
+      "to": "n1"
+    },
+    {
+      "from": "n1",
+      "to": "n2"
+    },
+    {
+      "from": "n2",
+      "to": "n3"
+    },
+    {
+      "from": "n3",
+      "to": "n4"
+    },
+    {
+      "from": "n4",
+      "to": "e"
+    }
+  ],
+  "source": {
+    "painPointIds": [
+      "p1"
+    ]
+  }
+}

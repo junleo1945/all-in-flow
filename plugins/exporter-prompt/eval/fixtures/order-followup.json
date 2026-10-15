@@ -1,0 +1,176 @@
+{
+  "version": 2,
+  "kind": "automation",
+  "slug": "overdue-order-followup",
+  "name": "超期订单跟进与催办",
+  "description": "每天从 ERP 拉取昨天下单且未发货的订单，逐条判断是否超过承诺发货时间，超期订单交由人工联系销售确认原因并记录，最后汇总成给仓库的催办名单。当客服主管需要做每日订单异常跟进时使用。",
+  "trigger": {
+    "type": "schedule",
+    "detail": "每天早上执行",
+    "cron": "0 9 * * *"
+  },
+  "inputs": [
+    {
+      "name": "target_date",
+      "type": "string",
+      "description": "要检查的下单日期，默认为昨天，格式 YYYY-MM-DD",
+      "required": true
+    }
+  ],
+  "integrations": [
+    {
+      "id": "erp",
+      "name": "ERP 订单",
+      "purpose": "拉取昨天下单且未发货的订单",
+      "access": "api"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "s",
+      "type": "start",
+      "title": "开始"
+    },
+    {
+      "id": "n1",
+      "type": "step",
+      "title": "拉取未发货订单",
+      "executor": "deterministic",
+      "integration": "erp",
+      "instructions": "调用 ERP 的订单查询接口，拉取 target_date 当天下单且状态为未发货的订单列表。",
+      "chatInstructions": "打开 ERP 的订单查询页面，把下单时间设为昨天的 00:00 到今天 00:00，发货状态筛选为“未发货”，然后导出这批订单列表。",
+      "action": {
+        "kind": "integration",
+        "integration": "erp",
+        "operation": "listOrders",
+        "params": {
+          "start": "{{input.target_date}}",
+          "end": "{{input.target_date}}"
+        }
+      },
+      "outputs": [
+        {
+          "name": "orders",
+          "type": "array",
+          "description": "昨天下单且未发货的订单列表"
+        }
+      ]
+    },
+    {
+      "id": "n2",
+      "type": "foreach",
+      "title": "逐条判断超期",
+      "over": "n1.orders",
+      "item": "order",
+      "body": {
+        "nodes": [
+          {
+            "id": "b_s",
+            "type": "start",
+            "title": "开始"
+          },
+          {
+            "id": "b_d",
+            "type": "decision",
+            "title": "是否超过承诺发货时间",
+            "mode": "expr",
+            "question": "该订单当前时间是否已超过承诺发货时间"
+          },
+          {
+            "id": "b_h",
+            "type": "step",
+            "title": "联系销售确认原因",
+            "executor": "human",
+            "instructions": "把该订单信息提供给用户，请用户联系对应销售确认未发货原因并记录确认结果。",
+            "action": {
+              "kind": "human",
+              "message": "订单 {{order.id}}（客户 {{order.customer}}）已超过承诺发货时间 {{order.promisedShipTime}}，请联系对应销售确认未发货原因并填写原因说明。",
+              "approval": false
+            },
+            "outputs": [
+              {
+                "name": "overdue_reason",
+                "type": "string",
+                "description": "销售确认的超期原因"
+              }
+            ]
+          },
+          {
+            "id": "b_e",
+            "type": "end",
+            "title": "结束"
+          }
+        ],
+        "edges": [
+          {
+            "from": "b_s",
+            "to": "b_d"
+          },
+          {
+            "from": "b_d",
+            "to": "b_h",
+            "label": "已超期",
+            "condition": {
+              "left": "order.overdue",
+              "op": "is_true"
+            }
+          },
+          {
+            "from": "b_d",
+            "to": "b_e",
+            "label": "未超期",
+            "default": true
+          },
+          {
+            "from": "b_h",
+            "to": "b_e"
+          }
+        ]
+      }
+    },
+    {
+      "id": "n3",
+      "type": "step",
+      "title": "汇总催办名单",
+      "executor": "llm",
+      "instructions": "根据逐条跟进的超期订单及其原因，汇总成一份给仓库的催办名单，包含订单号、客户、承诺发货时间、超期天数和原因。",
+      "action": {
+        "kind": "llm",
+        "prompt": "根据 {{n1.orders}} 中已超期且已完成原因确认的订单，生成一份给仓库的催办名单，按超期天数从多到少排序，列出订单号、客户、承诺发货时间、超期天数和销售确认的原因。"
+      },
+      "outputs": [
+        {
+          "name": "expedite_list",
+          "type": "string",
+          "description": "给仓库的催办名单"
+        }
+      ]
+    },
+    {
+      "id": "e",
+      "type": "end",
+      "title": "结束"
+    }
+  ],
+  "edges": [
+    {
+      "from": "s",
+      "to": "n1"
+    },
+    {
+      "from": "n1",
+      "to": "n2"
+    },
+    {
+      "from": "n2",
+      "to": "n3"
+    },
+    {
+      "from": "n3",
+      "to": "e"
+    }
+  ],
+  "source": {
+    "painPointIds": []
+  }
+}

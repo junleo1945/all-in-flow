@@ -2,6 +2,7 @@ import JSZip from "jszip";
 import { checkExport, lower, toMermaid, type ExportFile, type WorkflowIR } from "@aif/workflow-ir";
 import { skillExporter, type SkillOptions } from "@aif/plugin-exporter-skill";
 import { promptExporter } from "@aif/plugin-exporter-prompt";
+export { applyPromptAnswers, promptGaps, type PromptGap } from "@aif/plugin-exporter-prompt";
 import { n8nExporter, type N8nOptions } from "@aif/plugin-exporter-n8n";
 import { exportToBlob, exportToSvg, serializeAsJSON } from "@excalidraw/excalidraw";
 import type { Scene } from "./canvas";
