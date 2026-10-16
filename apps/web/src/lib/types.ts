@@ -1,3 +1,5 @@
+import { tr } from "../i18n";
+
 export interface Me {
   UserName: string;
   DisplayName: string;
@@ -54,21 +56,24 @@ export interface Profile {
   fastTrack?: boolean;
 }
 
-export const STAGE_LABELS: Array<{ key: string; label: string }> = [
-  { key: "role", label: "了解角色" },
-  { key: "inventory", label: "盘点工作" },
-  { key: "dig", label: "深挖痛点" },
-  { key: "rank", label: "量化排序" },
-  { key: "propose", label: "提出方案" },
-  { key: "generate", label: "生成工作流" },
-];
+const STAGE_KEYS = ["role", "inventory", "dig", "rank", "propose", "generate"] as const;
 
-export const FREQ_LABEL: Record<Frequency, string> = {
-  daily: "每天",
-  weekly: "每周",
-  monthly: "每月",
-  ad_hoc: "不定期",
-};
+/** 访谈阶段列表（标签按当前语言取，不能在模块顶层缓存） */
+export function stageLabels(): Array<{ key: string; label: string }> {
+  return STAGE_KEYS.map((key) => ({ key, label: tr(`stage.${key}`) }));
+}
+
+export function stageKeys(): readonly string[] {
+  return STAGE_KEYS;
+}
+
+export function stageLabel(key: string): string | undefined {
+  return (STAGE_KEYS as readonly string[]).includes(key) ? tr(`stage.${key}`) : undefined;
+}
+
+export function freqLabel(f: Frequency): string {
+  return tr(`freq.${f}`);
+}
 
 /** 按优先级排序，未评分的排在最后 */
 export function rankPainPoints(points: PainPoint[]): PainPoint[] {

@@ -3,6 +3,7 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import type { AppVariables } from "../http/context.js";
 import { AppError, ok } from "../http/envelope.js";
+import { tm, tr, type Locale } from "../i18n.js";
 import { describeForAgent, type AttachmentService } from "../attachments/service.js";
 import { stripTurnContext } from "../agent/turnContext.js";
 import type { SessionRegistry } from "../agent/registry.js";
@@ -52,6 +53,7 @@ const MessageBody = z.object({
 export async function runTurn(
   send: (event: string, data: unknown) => Promise<void> | void,
   run: (sink: (event: string, data: unknown) => void) => Promise<void>,
+  locale: Locale = "zh",
 ) {
   try {
     await run((event, data) => {
@@ -59,7 +61,7 @@ export async function runTurn(
     });
   } catch (e) {
     if (!(e instanceof SessionBusy)) console.error("agent turn failed:", e);
-    await send("error", { message: userFacingError(e) });
+    await send("error", { message: userFacingError(e, locale) });
   } finally {
     await send("done", {});
   }
@@ -68,11 +70,11 @@ export async function runTurn(
 /**
  * 返回给前端的错误文案。原始错误（可能包含服务器路径、堆栈等内部信息）只写日志，不返回给用户。
  */
-export function userFacingError(e: unknown): string {
-  if (e instanceof SessionBusy) return e.message;
+export function userFacingError(e: unknown, locale: Locale = "zh"): string {
+  if (e instanceof SessionBusy) return tr(locale, e.message);
   const raw = e instanceof Error ? e.message : String(e);
-  if (/api key/i.test(raw)) return "模型服务尚未配置，请联系管理员。";
-  return "AI 顾问暂时无法回复，请稍后再试。";
+  if (/api key/i.test(raw)) return tm(locale, "conv.modelNotConfigured");
+  return tm(locale, "conv.unavailable");
 }
 
 /** 从 Pi 消息内容中取出纯文本（忽略工具调用等块） */
@@ -102,7 +104,7 @@ export function conversationRoutes(deps: ConversationRouteDeps) {
   r.get("/", async (c) => ok(c, await listConversations(deps.db, c.get("user").id)));
 
   r.post("/", async (c) => {
-    const conv = await createConversation(deps.db, c.get("user").id);
+    const conv = await createConversation(deps.db, c.get("user").id, tm(c.get("locale"), "conv.defaultTitle"));
     return ok(c, { id: conv.id, title: conv.title, stage: conv.stage }, 201);
   });
 
@@ -174,7 +176,7 @@ export function conversationRoutes(deps: ConversationRouteDeps) {
     const userId = c.get("user").id;
     const id = c.req.param("id");
     const parsed = PatchBody.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) throw new AppError(400, "参数不正确");
+    if (!parsed.success) throw new AppError(400, tm(c.get("locale"), "conv.badParams"));
     if (parsed.data.pinned !== undefined) {
       await guard(() => setPinned(deps.db, userId, id, parsed.data.pinned!));
     }
@@ -205,7 +207,7 @@ export function conversationRoutes(deps: ConversationRouteDeps) {
     const userId = c.get("user").id;
     const id = c.req.param("id");
     const parsed = ProfileBody.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) throw new AppError(400, "画像内容不正确");
+    if (!parsed.success) throw new AppError(400, tm(c.get("locale"), "conv.badProfile"));
     const conv = await guard(() => getConversation(deps.db, userId, id));
     const profile = conv.profile as Profile;
     if (parsed.data.role) profile.role = { ...profile.role, ...parsed.data.role } as Profile["role"];
@@ -234,12 +236,12 @@ export function conversationRoutes(deps: ConversationRouteDeps) {
     const userId = c.get("user").id;
     const id = c.req.param("id");
     const parsed = MessageBody.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) throw new AppError(400, "消息不能为空，且不超过 4000 字");
+    if (!parsed.success) throw new AppError(400, tm(c.get("locale"), "conv.badMessage"));
 
     const conv = await guard(() => getConversation(deps.db, userId, id));
-    if (deps.registry.isBusy(id)) throw new AppError(409, "上一条消息还在处理中，请稍候");
+    if (deps.registry.isBusy(id)) throw new AppError(409, tm(c.get("locale"), "conv.busy"));
     if (deps.registry.userMessageCount(id) >= deps.config.maxTurnsPerConversation) {
-      throw new AppError(429, "这次访谈已经达到轮数上限，请新建一个访谈");
+      throw new AppError(429, tm(c.get("locale"), "conv.turnLimit"));
     }
     try {
       await assertBudget(deps.db, userId, deps.config);
@@ -262,13 +264,13 @@ export function conversationRoutes(deps: ConversationRouteDeps) {
       // 带图片的消息：等待识别完成，把识别结果放在用户文字之前，并标记为已发送
       const attIds = parsed.data.attachmentIds ?? [];
       if (attIds.length) {
-        if (!deps.attachments) throw new AppError(503, "图片识别未开启");
+        if (!deps.attachments) throw new AppError(503, tm(c.get("locale"), "img.visionOff"));
         const rows = await deps.attachments.waitReady(userId, id, attIds);
         text = `${describeForAgent(rows)}\n\n${text}`;
         await deps.attachments.markSent(attIds);
       }
       const generateNow = parsed.data.intent === "generate_now";
-      await runTurn(send, (sink) => deps.registry.prompt(userId, id, text, sink, { generateNow }));
+      await runTurn(send, (sink) => deps.registry.prompt(userId, id, text, sink, { generateNow }), c.get("locale"));
     });
   });
 

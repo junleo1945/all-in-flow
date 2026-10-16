@@ -3,6 +3,7 @@ import type { WorkflowIR } from "@aif/workflow-ir";
 import { api } from "../lib/api";
 import * as ex from "../lib/exporters";
 import { ExportPreview, type PreviewFile } from "./ExportPreview";
+import { useI18n } from "../i18n";
 
 /**
  * 对话提示词预览：缺少判断标准或模板时，直接在预览上方补充，提示词随输入实时更新。
@@ -20,6 +21,7 @@ export function PromptExportPreview({
   onSaved?: (version: number) => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   // 以打开时的版本为基准；保存后换成已保存的内容，表单随之清空
   const [base, setBase] = useState(ir);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -41,13 +43,13 @@ export function PromptExportPreview({
         setMeta({
           filename: r.filename,
           notes: [
-            "完整版：直接粘贴到聊天窗口，或放进 ChatGPT Projects、Claude Projects 等可以写长指令的地方。精简版：2000 字以内，适合放进豆包智能体、Gemini Gem 等字数有限的设定。",
-            ...r.requirements.map((q) => `使用前需要：${q}`),
-            ...r.warnings.map((w) => `注意：${w}`),
+            t("exp.pNote"),
+            ...r.requirements.map((q) => t("exp.reqUse", { q })),
+            ...r.warnings.map((w) => t("exp.warn", { w })),
           ],
         });
       })
-      .catch((e: Error) => live && setMsg({ kind: "err", text: e.message || "生成失败" }));
+      .catch((e: Error) => live && setMsg({ kind: "err", text: e.message || t("exp.genFail") }));
     return () => {
       live = false;
     };
@@ -61,10 +63,10 @@ export function PromptExportPreview({
       const r = await api.post<{ version: number }>(`/workflows/${workflowId}/versions`, { ir: patched });
       setBase(patched);
       setAnswers({});
-      setMsg({ kind: "ok", text: `已保存为 v${r.version}，下次导出不用再填` });
+      setMsg({ kind: "ok", text: t("exp.saved", { v: r.version }) });
       onSaved?.(r.version);
     } catch (e) {
-      setMsg({ kind: "err", text: (e as Error).message || "保存失败" });
+      setMsg({ kind: "err", text: (e as Error).message || t("exp.saveFail") });
     } finally {
       setSaving(false);
     }
@@ -72,12 +74,12 @@ export function PromptExportPreview({
 
   const form =
     gaps.length > 0 || msg ? (
-      <section className="ep-gaps" aria-label="补充信息">
+      <section className="ep-gaps" aria-label={t("exp.gapsLabel")}>
         {gaps.length > 0 && (
           <>
             <div className="ep-gaps-h">
-              <b>补充后再导出</b>
-              <span className="muted">不填也可以导出，AI 会在对话开始时向用户询问。</span>
+              <b>{t("exp.gapsTitle")}</b>
+              <span className="muted">{t("exp.gapsHint")}</span>
             </div>
             {gaps.map((g) => (
               <label key={g.nodeId} className="ep-gap">
@@ -85,7 +87,7 @@ export function PromptExportPreview({
                 <textarea
                   rows={2}
                   value={answers[g.nodeId] ?? ""}
-                  placeholder={g.kind === "criteria" ? "例如：订单状态为 abnormal，或金额超过 1 万" : "例如：三段：本周销售额、环比、Top 3 客户"}
+                  placeholder={g.kind === "criteria" ? t("exp.phCriteria") : t("exp.phTemplate")}
                   onChange={(e) => setAnswers((a) => ({ ...a, [g.nodeId]: e.target.value }))}
                 />
               </label>
@@ -93,7 +95,7 @@ export function PromptExportPreview({
             {workflowId && (
               <div className="ep-gap-actions">
                 <button className="btn btn-line" disabled={!filled || saving} onClick={save}>
-                  {saving ? "保存中…" : "保存为新版本"}
+                  {saving ? t("exp.saving") : t("exp.saveNew")}
                 </button>
               </div>
             )}
@@ -107,10 +109,10 @@ export function PromptExportPreview({
     <ExportPreview
       top={form}
       spec={{
-        title: "对话提示词预览",
+        title: t("exp.promptPreview"),
         files,
         notes: meta.notes,
-        downloadLabel: "下载 .zip",
+        downloadLabel: t("exp.downloadZip"),
         onDownload: async () => ex.download(await ex.zipFiles(files), meta.filename),
       }}
       onClose={onClose}

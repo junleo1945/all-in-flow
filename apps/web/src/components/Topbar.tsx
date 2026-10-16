@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { formatTokens, useMe } from "../lib/useMe";
+import { useI18n } from "../i18n";
 
 export function BrandMark({ size = 22 }: { size?: number }) {
   return (
@@ -15,6 +16,7 @@ export function BrandMark({ size = 22 }: { size?: number }) {
 
 export function Topbar({ children, showUser = true }: { children?: ReactNode; showUser?: boolean }) {
   const { me } = useMe();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const logout = async () => {
     // 即使请求失败也回到登录页：服务端的会话过期后同样需要重新登录
@@ -32,14 +34,14 @@ export function Topbar({ children, showUser = true }: { children?: ReactNode; sh
       {showUser && me && (
         <div className="user">
           <div className="meter">
-            今日
+            {t("shell.today")}
             <span className="bar" style={{ width: 70 }}>
               <i style={{ width: `${pct}%` }} />
             </span>
             {formatTokens(me.usage.tokensToday)} / {formatTokens(me.usage.dailyTokenQuota)}
           </div>
           <UserMenu name={me.DisplayName} />
-          <button type="button" className="logout" onClick={logout}>退出</button>
+          <button type="button" className="logout" onClick={logout}>{t("shell.logout")}</button>
         </div>
       )}
     </header>
@@ -49,6 +51,7 @@ export function Topbar({ children, showUser = true }: { children?: ReactNode; sh
 /** 头像菜单：左键或右键点击头像和用户名弹出，放与访谈无关的工具入口 */
 export function UserMenu({ name }: { name: string }) {
   const [open, setOpen] = useState(false);
+  const { t, locale, setLocale } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -91,8 +94,9 @@ export function UserMenu({ name }: { name: string }) {
       </button>
       {open && (
         <div className="pop-menu" role="menu">
-          <button type="button" role="menuitem" onClick={() => go("/mermaid")}>Mermaid 预览</button>
-          <button type="button" role="menuitem" onClick={() => go("/integrations")}>集成目录</button>
+          <button type="button" role="menuitem" onClick={() => go("/mermaid")}>{t("shell.mermaidPreview")}</button>
+          <button type="button" role="menuitem" onClick={() => go("/integrations")}>{t("shell.integrations")}</button>
+          <button type="button" role="menuitem" onClick={() => { setOpen(false); setLocale(locale === "zh" ? "en" : "zh"); }}>{t("shell.language")}</button>
         </div>
       )}
     </div>

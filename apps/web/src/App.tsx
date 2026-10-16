@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import LoginPage from "./pages/Login";
 import HomePage from "./pages/Home";
+import { useI18n } from "./i18n";
 
 // 工作台和分享页包含画布（Excalidraw），按需加载，登录页不需要它
 const WorkspacePage = lazy(() => import("./pages/Workspace"));
@@ -17,8 +18,9 @@ function WorkspaceRoute() {
 
 export default function App() {
   const loc = useLocation();
+  const { t } = useI18n();
   return (
-    <Suspense fallback={<div className="empty" style={{ padding: 40 }}>加载中…</div>}>
+    <Suspense fallback={<div className="empty" style={{ padding: 40 }}>{t("shell.loading")}</div>}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<HomePage />} />

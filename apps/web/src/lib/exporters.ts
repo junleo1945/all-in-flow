@@ -1,11 +1,21 @@
 import JSZip from "jszip";
-import { checkExport, lower, toMermaid, type ExportFile, type WorkflowIR } from "@aif/workflow-ir";
+import { checkExport, lower, toMermaid, type ExportFile, type ExportIssue, type WorkflowIR } from "@aif/workflow-ir";
+import { tr } from "../i18n";
 import { skillExporter, type SkillOptions } from "@aif/plugin-exporter-skill";
 import { promptExporter } from "@aif/plugin-exporter-prompt";
 export { applyPromptAnswers, promptGaps, type PromptGap } from "@aif/plugin-exporter-prompt";
 import { n8nExporter, type N8nOptions } from "@aif/plugin-exporter-n8n";
 import { exportToBlob, exportToSvg, serializeAsJSON } from "@excalidraw/excalidraw";
 import type { Scene } from "./canvas";
+
+/** 导出问题按当前语言展示；没有词条 key 的（插件自己写的中文说明）原样显示 */
+export function issueText(i: ExportIssue): string {
+  if (!i.key) return i.message;
+  const feature = i.params?.feature ?? "";
+  const label = tr(`exp.feat.${feature}`);
+  const nodes = i.params?.nodes ?? "";
+  return tr(nodes ? i.key : `${i.key}NoNode`, { label, nodes });
+}
 
 /** 内置导出：PNG / SVG / Excalidraw 都取自画布当前的元素，与屏幕所见一致 */
 const baseAppState = { exportBackground: true, viewBackgroundColor: "#FFFEFA" };
@@ -58,11 +68,11 @@ export async function buildSkill(ir: WorkflowIR, options: SkillOptions = { targe
   const graph = lower(ir);
   const issues = checkExport(skillExporter, graph);
   const errors = issues.filter((i) => i.level === "error");
-  if (errors.length) throw new Error(errors.map((e) => e.message).join("；"));
+  if (errors.length) throw new Error(errors.map(issueText).join("；"));
 
   const files = (await skillExporter.compile(graph, options)) as ExportFile[];
   const suffix = options.packaging === "claude-plugin" ? "claude-plugin" : "skill";
-  return { files, filename: `${ir.slug}.${suffix}.zip`, warnings: issues.map((i) => i.message), requirements: skillExporter.requirements(graph) };
+  return { files, filename: `${ir.slug}.${suffix}.zip`, warnings: issues.map(issueText), requirements: skillExporter.requirements(graph) };
 }
 
 /** 把文件打包成 zip */
@@ -80,11 +90,11 @@ export async function exportN8nJson(ir: WorkflowIR, options: N8nOptions = n8nExp
   const graph = lower(ir);
   const issues = checkExport(n8nExporter, graph);
   const errors = issues.filter((i) => i.level === "error");
-  if (errors.length) throw new Error(errors.map((e) => e.message).join("；"));
+  if (errors.length) throw new Error(errors.map(issueText).join("；"));
 
   const [file] = (await n8nExporter.compile(graph, options)) as ExportFile[];
   const blob = new Blob([file!.content as string], { type: "application/json" });
-  return { blob, filename: file!.path, warnings: issues.map((i) => i.message), requirements: n8nExporter.requirements(graph) };
+  return { blob, filename: file!.path, warnings: issues.map(issueText), requirements: n8nExporter.requirements(graph) };
 }
 
 /**
@@ -95,14 +105,14 @@ export async function exportPrompt(ir: WorkflowIR) {
   const graph = lower(ir);
   const issues = checkExport(promptExporter, graph);
   const errors = issues.filter((i) => i.level === "error");
-  if (errors.length) throw new Error(errors.map((e) => e.message).join("；"));
+  if (errors.length) throw new Error(errors.map(issueText).join("；"));
 
   // 完整版与精简版：预览时用文件树切换，下载时打成一个 zip
   const files = (await promptExporter.compile(graph, promptExporter.defaultOptions)) as ExportFile[];
   return {
     files,
     filename: `${ir.slug}.prompt.zip`,
-    warnings: issues.map((i) => i.message),
+    warnings: issues.map(issueText),
     requirements: promptExporter.requirements(graph),
   };
 }

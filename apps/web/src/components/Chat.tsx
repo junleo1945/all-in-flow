@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
+import { tr, useI18n } from "../i18n";
 import { formatMsgTime, type Item } from "../lib/timeline";
 import { ACCEPT_IMAGE, MAX_ATTACHMENTS, usePendingAttachments } from "../lib/attachments";
 import { ImageLightbox } from "./ImageLightbox";
@@ -26,6 +27,7 @@ export function Chat({
   onHint: (h: { label: string; text: string; prefill?: boolean; intent?: "generate_now" }) => void;
   attachmentsEnabled: boolean;
 }) {
+  const { t } = useI18n();
   const [input, setInput] = useState("");
   const [preview, setPreview] = useState<{ src: string; caption?: string } | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -49,7 +51,7 @@ export function Chat({
 
   const submit = () => {
     if (!canSend) return;
-    onSend(input.trim() || "请看这张图片", att.readyIds);
+    onSend(input.trim() || t("chat.defaultImageMsg"), att.readyIds);
     setInput("");
     att.clear();
   };
@@ -83,14 +85,14 @@ export function Chat({
   const full = att.items.length >= MAX_ATTACHMENTS;
 
   return (
-    <section className="chat" aria-label="对话">
+    <section className="chat" aria-label={t("chat.ariaLabel")}>
       <div className="msgs">
-        {items.length === 0 && !busy && <div className="empty">描述一件你日常要做的工作，AI 顾问会一步步追问。</div>}
+        {items.length === 0 && !busy && <div className="empty">{t("chat.empty")}</div>}
         {items.map((it) => (
           <ItemView key={it.id} item={it} onChoice={onChoice} busy={busy} onPreview={setPreview} />
         ))}
         {busy && items[items.length - 1]?.kind !== "msg" && (
-          <div className="typing"><i /><i /><i />&nbsp;AI 顾问正在思考</div>
+          <div className="typing"><i /><i /><i />&nbsp;{t("chat.thinking")}</div>
         )}
         <div ref={endRef} />
       </div>
@@ -110,19 +112,19 @@ export function Chat({
           ))}
         </div>
         {att.items.length > 0 && (
-          <div className="att-strip" aria-label="待发送的图片">
+          <div className="att-strip" aria-label={t("chat.pendingImages")}>
             {att.items.map((x) => (
               <div key={x.localId} className={`att att-${x.status}`}>
-                <button className="att-img" onClick={() => setPreview({ src: x.previewUrl, caption: x.summary })} aria-label="放大预览">
+                <button className="att-img" onClick={() => setPreview({ src: x.previewUrl, caption: x.summary })} aria-label={t("chat.enlargePreview")}>
                   <img src={x.previewUrl} alt="" />
                 </button>
                 <span className="att-status">
-                  {x.status === "uploading" && "上传中"}
-                  {x.status === "processing" && "识别中"}
-                  {x.status === "ready" && "已识别"}
-                  {x.status === "failed" && (x.error ?? "失败")}
+                  {x.status === "uploading" && t("chat.uploading")}
+                  {x.status === "processing" && t("chat.processing")}
+                  {x.status === "ready" && t("chat.ready")}
+                  {x.status === "failed" && (x.error ?? t("chat.failedShort"))}
                 </span>
-                <button className="att-remove" onClick={() => void att.remove(x.localId)} aria-label="移除图片">✕</button>
+                <button className="att-remove" onClick={() => void att.remove(x.localId)} aria-label={t("chat.removeImage")}>✕</button>
               </div>
             ))}
           </div>
@@ -135,23 +137,14 @@ export function Chat({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKey}
             onPaste={onPaste}
-            placeholder={attachmentsEnabled ? "回答问题，粘贴截图，或告诉 AI 要怎么修改工作流…" : "回答问题，或告诉 AI 要怎么修改工作流…"}
-            aria-label="输入消息"
+            placeholder={attachmentsEnabled ? t("chat.placeholderImg") : t("chat.placeholder")}
+            aria-label={t("chat.inputAria")}
             disabled={busy}
           />
           <div className="input-foot">
-            {busy ? (
-              <button className="send" onClick={onStop} aria-label="停止">■</button>
-            ) : (
-              <button className="send" onClick={submit} aria-label="发送" disabled={!canSend}>↑</button>
-            )}
-          </div>
-        </div>
-        {(attachmentsEnabled || att.busy || att.failed) && (
-          <div className="composer-tools">
             {attachmentsEnabled && (
               <>
-                <button className="attach-btn" disabled={busy || full} onClick={() => fileRef.current?.click()} aria-label="添加图片">
+                <button className="attach-btn" disabled={busy || full} onClick={() => fileRef.current?.click()} aria-label={t("chat.addImage")}>
                   <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
                     <path d="M9 3v12M3 9h12" />
                   </svg>
@@ -162,10 +155,15 @@ export function Chat({
                 }} />
               </>
             )}
-            {att.busy && <span className="composer-note">图片上传中</span>}
-            {att.failed && <span className="composer-note composer-note-error">有图片失败，请移除后再发送</span>}
+            {att.busy && <span className="composer-note">{t("chat.imagesUploading")}</span>}
+            {att.failed && <span className="composer-note composer-note-error">{t("chat.imagesFailed")}</span>}
+            {busy ? (
+              <button className="send" onClick={onStop} aria-label={t("chat.stop")}>■</button>
+            ) : (
+              <button className="send" onClick={submit} aria-label={t("chat.send")} disabled={!canSend}>↑</button>
+            )}
           </div>
-        )}
+        </div>
       </div>
       {preview && <ImageLightbox src={preview.src} caption={preview.caption} onClose={() => setPreview(null)} />}
     </section>
@@ -173,6 +171,7 @@ export function Chat({
 }
 
 function ItemView({ item, onChoice, busy, onPreview }: { item: Item; onChoice: (id: string, a: string) => void; busy: boolean; onPreview: (p: { src: string }) => void }) {
+  const { t } = useI18n();
   switch (item.kind) {
     case "msg": {
       const time = item.time ? <div className={`msg-time ${item.role === "user" ? "me" : "ai"}`}>{formatMsgTime(item.time)}</div> : null;
@@ -182,7 +181,7 @@ function ItemView({ item, onChoice, busy, onPreview }: { item: Item; onChoice: (
             {item.attachments?.length ? (
               <div className="msg-thumbs">
                 {item.attachments.map((id) => (
-                  <button key={id} className="att-img" onClick={() => onPreview({ src: `/api/attachments/${id}/file` })} aria-label="放大图片">
+                  <button key={id} className="att-img" onClick={() => onPreview({ src: `/api/attachments/${id}/file` })} aria-label={t("chat.enlargeImage")}>
                     <img src={`/api/attachments/${id}/file`} alt="" />
                   </button>
                 ))}
@@ -195,7 +194,7 @@ function ItemView({ item, onChoice, busy, onPreview }: { item: Item; onChoice: (
       ) : (
         <>
           <div className="msg ai">
-            <div className="who">AI 顾问</div>
+            <div className="who">{t("chat.advisor")}</div>
             {item.text}
             {item.streaming && <span className="typing" style={{ display: "inline-flex", marginLeft: 4 }}><i /></span>}
           </div>
@@ -206,10 +205,10 @@ function ItemView({ item, onChoice, busy, onPreview }: { item: Item; onChoice: (
     case "tools":
       return (
         <div className="toolrow">
-          {item.tools.map((t) => (
-            <span key={t.id} className={`tool ${t.status === "start" ? "run" : ""}`}>
-              {t.status === "end" && !t.error && <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2}><path d="M2 6.5l2.5 2.5L10 3.5" /></svg>}
-              {t.error ? "出错：" : t.status === "start" ? "处理中：" : ""}{TOOL_LABEL[t.name] ?? t.name}
+          {item.tools.map((tl) => (
+            <span key={tl.id} className={`tool ${tl.status === "start" ? "run" : ""}`}>
+              {tl.status === "end" && !tl.error && <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2}><path d="M2 6.5l2.5 2.5L10 3.5" /></svg>}
+              {tl.error ? t("tool.error") : tl.status === "start" ? t("tool.running") : ""}{toolLabel(tl.name)}
             </span>
           ))}
         </div>
@@ -226,8 +225,8 @@ function ItemView({ item, onChoice, busy, onPreview }: { item: Item; onChoice: (
               </button>
             ))}
           </div>
-          {item.allowOther && !item.answered && <div className="other">也可以直接输入其他回答</div>}
-          {item.answered && <div className="other">已回答：{item.answered}</div>}
+          {item.allowOther && !item.answered && <div className="other">{t("chat.otherAnswer")}</div>}
+          {item.answered && <div className="other">{t("chat.answered", { answer: item.answered })}</div>}
         </div>
       );
     case "proposals":
@@ -236,7 +235,7 @@ function ItemView({ item, onChoice, busy, onPreview }: { item: Item; onChoice: (
           {item.candidates.map((c) => (
             <div className="prop" key={c.id}>
               <h5>{c.title}</h5>
-              <div className="save">{c.savedMinutesPerWeek !== undefined ? `≈ ${Math.round(c.savedMinutesPerWeek)} 分钟` : "—"}<small style={{ display: "block", fontFamily: "var(--sans)", fontWeight: 400, color: "var(--ink-3)" }}>每周节省</small></div>
+              <div className="save">{c.savedMinutesPerWeek !== undefined ? t("chat.minutes", { n: Math.round(c.savedMinutesPerWeek) }) : "—"}<small style={{ display: "block", fontFamily: "var(--sans)", fontWeight: 400, color: "var(--ink-3)" }}>{t("chat.perWeekSaved")}</small></div>
               <p>{c.summary}</p>
             </div>
           ))}
@@ -246,7 +245,7 @@ function ItemView({ item, onChoice, busy, onPreview }: { item: Item; onChoice: (
       return (
         <div className="wf-card">
           <div className="ic"><svg width="18" height="18" viewBox="0 0 26 26" fill="none" stroke="#1C1B18" strokeWidth={2.4}><rect x="2" y="3" width="9" height="7" rx="2" /><rect x="15" y="16" width="9" height="7" rx="2" /><path d="M6.5 10v5.5a3 3 0 0 0 3 3H15" /></svg></div>
-          <div><b>已更新工作流 · v{item.version}</b><span>{item.name}，画布已刷新</span></div>
+          <div><b>{t("chat.wfUpdated", { version: item.version })}</b><span>{t("chat.canvasRefreshed", { name: item.name })}</span></div>
         </div>
       );
     case "error":
@@ -254,13 +253,8 @@ function ItemView({ item, onChoice, busy, onPreview }: { item: Item; onChoice: (
   }
 }
 
-export const TOOL_LABEL: Record<string, string> = {
-  set_stage: "切换阶段",
-  update_profile: "记录角色",
-  record_task: "记录工作",
-  record_pain_point: "记录痛点",
-  ask_choices: "给出选项",
-  propose_workflows: "提出方案",
-  emit_workflow: "生成工作流",
-  ask_image: "追问图片",
-};
+const TOOL_NAMES = ["set_stage", "update_profile", "record_task", "record_pain_point", "ask_choices", "propose_workflows", "emit_workflow", "ask_image"];
+
+export function toolLabel(name: string): string {
+  return TOOL_NAMES.includes(name) ? tr(`tool.${name}`) : name;
+}

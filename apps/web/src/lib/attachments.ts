@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, redirectToLogin, AUTH_EXPIRED_CODE } from "./api";
+import { currentLocale, tr } from "../i18n";
 
 export const MAX_ATTACHMENTS = 4;
 export const ACCEPT_IMAGE = "image/png,image/jpeg,image/webp";
@@ -35,13 +36,13 @@ const isImage = (f: File) => ACCEPT_IMAGE.split(",").includes(f.type);
 async function uploadFile(conversationId: string, file: File): Promise<UploadResult> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`/api/conversations/${conversationId}/attachments`, { method: "POST", credentials: "include", body: form });
+  const res = await fetch(`/api/conversations/${conversationId}/attachments`, { method: "POST", credentials: "include", headers: { "X-Locale": currentLocale() }, body: form });
   const body = await res.json().catch(() => null);
   if (res.status === 401 || body?.code === AUTH_EXPIRED_CODE) {
     redirectToLogin();
-    throw new ApiError(AUTH_EXPIRED_CODE, "请重新登录", res.status);
+    throw new ApiError(AUTH_EXPIRED_CODE, tr("att.relogin"), res.status);
   }
-  if (!res.ok || body?.code !== 0) throw new ApiError(body?.code ?? res.status, body?.message || "上传失败", res.status);
+  if (!res.ok || body?.code !== 0) throw new ApiError(body?.code ?? res.status, body?.message || tr("att.uploadFail"), res.status);
   return body.data as UploadResult;
 }
 
@@ -70,10 +71,10 @@ export function usePendingAttachments(conversationId: string, enabled: boolean) 
             return;
           }
           pollers.current.delete(localId);
-          update(localId, d.status === "ready" ? { status: "ready", summary: d.vision?.summary } : { status: "failed", error: d.error ?? "识别超时，请删除后重试" });
+          update(localId, d.status === "ready" ? { status: "ready", summary: d.vision?.summary } : { status: "failed", error: d.error ?? tr("att.timeout") });
         } catch {
           pollers.current.delete(localId);
-          update(localId, { status: "failed", error: "识别状态获取失败" });
+          update(localId, { status: "failed", error: tr("att.statusFail") });
         }
       };
       void tick();
@@ -95,7 +96,7 @@ export function usePendingAttachments(conversationId: string, enabled: boolean) 
           update(localId, { id: r.id, status: "processing" });
           poll(localId, r.id);
         } catch (e) {
-          update(localId, { status: "failed", error: e instanceof ApiError ? e.message : "上传失败" });
+          update(localId, { status: "failed", error: e instanceof ApiError ? e.message : tr("att.uploadFail") });
         }
       }
     },

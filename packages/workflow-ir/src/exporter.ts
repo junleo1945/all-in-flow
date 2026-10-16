@@ -4,7 +4,11 @@ import { FEATURE_LABELS } from "./lower.js";
 export interface ExportIssue {
   level: "error" | "warning";
   nodeId?: string;
+  /** 中文说明，给没有翻译能力的调用方直接展示 */
   message: string;
+  /** 可选的词条 key 和参数，界面按当前语言翻译时使用（参数里的 feature 是 Feature 原始 id） */
+  key?: string;
+  params?: Record<string, string>;
 }
 
 export interface ExportFile {
@@ -47,10 +51,12 @@ export function capabilityIssues(capabilities: ExporterPlugin["capabilities"], f
     const level = capabilities[feature];
     const label = FEATURE_LABELS[feature];
     const where = nodeIds.length ? `（节点：${nodeIds.join("、")}）` : "";
+    const nodes = nodeIds.join("、");
+    const params = { feature, nodes };
     if (level === undefined) {
-      issues.push({ level: "error", nodeId: nodeIds[0], message: `不支持导出「${label}」${where}` });
+      issues.push({ level: "error", nodeId: nodeIds[0], message: `不支持导出「${label}」${where}`, key: "exp.issue.unsupported", params });
     } else if (level === "degraded") {
-      issues.push({ level: "warning", nodeId: nodeIds[0], message: `「${label}」导出后会有损失${where}` });
+      issues.push({ level: "warning", nodeId: nodeIds[0], message: `「${label}」导出后会有损失${where}`, key: "exp.issue.degraded", params });
     }
   }
   return issues;

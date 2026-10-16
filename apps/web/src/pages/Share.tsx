@@ -4,7 +4,8 @@ import type { WorkflowIR } from "@aif/workflow-ir";
 import { api, ApiError } from "../lib/api";
 import { Topbar } from "../components/Topbar";
 import { CanvasView, useScene } from "../components/CanvasView";
-import { STAGE_LABELS } from "../lib/types";
+import { stageLabels } from "../lib/types";
+import { useI18n } from "../i18n";
 
 interface SharedView {
   name: string;
@@ -19,6 +20,7 @@ interface SharedView {
 }
 
 export default function SharePage() {
+  const { t } = useI18n();
   const { token = "" } = useParams();
   const nav = useNavigate();
   const [data, setData] = useState<SharedView | null>(null);
@@ -29,7 +31,7 @@ export default function SharePage() {
   useEffect(() => {
     api.get<SharedView>(`/s/${token}`)
       .then(setData)
-      .catch((e) => setError(e instanceof ApiError ? e.message : "分享加载失败"));
+      .catch((e) => setError(e instanceof ApiError ? e.message : t("share.loadFailed")));
   }, [token]);
 
   const fork = async () => {
@@ -38,7 +40,7 @@ export default function SharePage() {
       const r = await api.post<{ conversationId: string }>(`/s/${token}/fork`);
       nav(`/c/${r.conversationId}`);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "复制失败");
+      setError(e instanceof ApiError ? e.message : t("share.forkFailed"));
       setForking(false);
     }
   };
@@ -49,7 +51,7 @@ export default function SharePage() {
       {error && (
         <div style={{ padding: 40 }}>
           <div className="notice-error">{error}</div>
-          <p style={{ marginTop: 16 }}><Link to="/">返回首页</Link></p>
+          <p style={{ marginTop: 16 }}><Link to="/">{t("common.backHome")}</Link></p>
         </div>
       )}
       {data && (
@@ -57,34 +59,34 @@ export default function SharePage() {
           <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 24px", borderBottom: "1px solid var(--line)", background: "var(--sheet)" }}>
             <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.3 }}>
               <b className="serif" style={{ fontSize: 16 }}>{data.name}</b>
-              <span className="muted">{data.owner} 分享 · v{data.version}{data.version < data.latestVersion ? "（已锁定旧版本）" : ""} · {new Date(data.updatedAt).toLocaleDateString("zh-CN")} 更新 · {data.visibility === "public" ? "任何人可见" : "公司内可见"}</span>
+              <span className="muted">{t("share.sharedBy", { owner: data.owner, version: data.version, locked: data.version < data.latestVersion ? t("share.lockedOld") : "", date: new Date(data.updatedAt).toLocaleDateString(t("home.dateLocale")), vis: data.visibility === "public" ? t("share.visPublic") : t("share.visInternal") })}</span>
             </div>
             <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
               {data.canFork ? (
-                <button className="btn btn-ink" onClick={fork} disabled={forking}>{forking ? "复制中…" : "复制到我的工作台"}</button>
+                <button className="btn btn-ink" onClick={fork} disabled={forking}>{forking ? t("share.forking") : t("share.fork")}</button>
               ) : (
-                <Link className="btn btn-line" to={`/login?redirect=${encodeURIComponent(`/s/${token}`)}`}>登录后复制</Link>
+                <Link className="btn btn-line" to={`/login?redirect=${encodeURIComponent(`/s/${token}`)}`}>{t("share.loginToFork")}</Link>
               )}
             </div>
           </div>
           <div className="share-body">
             <div className="share-canvas">
               <CanvasView scene={scene.scene} loading={scene.loading} error={scene.error} readOnly />
-              <div className="ro-banner">只读分享 · 点击节点查看说明</div>
+              <div className="ro-banner">{t("share.readOnly")}</div>
             </div>
             <aside className="share-side">
               <div className="card">
-                <h3>关于这个工作流</h3>
+                <h3>{t("share.about")}</h3>
                 <p>{data.ir.description}</p>
                 <dl className="facts">
-                  <dt>触发方式</dt><dd>{data.ir.trigger.detail}</dd>
-                  {data.ir.integrations.length > 0 && (<><dt>前置条件</dt><dd>{data.ir.integrations.map((i) => i.name).join("、")}</dd></>)}
-                  <dt>步骤</dt><dd>{data.ir.nodes.filter((n) => n.type === "step").length} 步</dd>
+                  <dt>{t("share.trigger")}</dt><dd>{data.ir.trigger.detail}</dd>
+                  {data.ir.integrations.length > 0 && (<><dt>{t("share.prereq")}</dt><dd>{data.ir.integrations.map((i) => i.name).join(t("share.listSep"))}</dd></>)}
+                  <dt>{t("share.steps")}</dt><dd>{t("share.stepCount", { n: data.ir.nodes.filter((n) => n.type === "step").length })}</dd>
                 </dl>
               </div>
               {data.painPoints && data.painPoints.length > 0 && (
                 <div className="card">
-                  <h3>来源痛点</h3>
+                  <h3>{t("share.painPoints")}</h3>
                   {data.painPoints.map((p) => (
                     <div key={p.id} style={{ marginTop: 8 }}>
                       <b>{p.title}</b>
@@ -94,7 +96,7 @@ export default function SharePage() {
                 </div>
               )}
               <div className="card">
-                <h3>流程说明</h3>
+                <h3>{t("share.flowNotes")}</h3>
                 {data.ir.nodes.filter((n) => n.type === "step").map((n) => (
                   <div key={n.id} style={{ marginTop: 10 }}>
                     <span className={`dot ${n.executor === "deterministic" ? "det" : n.executor === "llm" ? "llm" : "hum"}`} />{" "}
@@ -103,7 +105,7 @@ export default function SharePage() {
                   </div>
                 ))}
               </div>
-              <div className="muted">{STAGE_LABELS.length ? "复制到工作台后可以继续通过对话修改，并导出为 Skill。" : ""}</div>
+              <div className="muted">{stageLabels().length ? t("share.forkHint") : ""}</div>
             </aside>
           </div>
         </>

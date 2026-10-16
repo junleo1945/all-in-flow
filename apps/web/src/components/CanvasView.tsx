@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type PointerEvent as ReactPointerEvent } from "react";
 import type { WorkflowIR } from "@aif/workflow-ir";
+import { tr, useI18n } from "../i18n";
 import { irToScene, mermaidToScene, type Scene } from "../lib/canvas";
-import { centerScroll } from "../lib/viewport";
+import { centerScroll, wheelZoomFactor, zoomAt } from "../lib/viewport";
 import { Excalidraw } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 
@@ -85,7 +86,7 @@ function Minimap({ elements, api, viewport }: { elements: MiniElement[]; api: Ex
       height={MM_H}
       viewBox={`0 0 ${MM_W} ${MM_H}`}
       role="img"
-      aria-label="流程图缩略图，点击或拖动可移动画布"
+      aria-label={tr("canvas.minimapAria")}
       onPointerDown={(e) => {
         dragging.current = true;
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -135,7 +136,7 @@ export function useScene(ir: WorkflowIR | null) {
     setState({ scene: null, error: "", loading: true });
     irToScene(ir)
       .then((scene) => !cancelled && setState({ scene, error: "", loading: false }))
-      .catch((e) => !cancelled && setState({ scene: null, error: `画布渲染失败：${(e as Error).message}`, loading: false }));
+      .catch((e) => !cancelled && setState({ scene: null, error: tr("canvas.renderFailed", { msg: (e as Error).message }), loading: false }));
     return () => {
       cancelled = true;
     };
@@ -159,7 +160,7 @@ export function useMermaidScene(src: string, delay = 400) {
     const timer = setTimeout(() => {
       mermaidToScene(src)
         .then((scene) => !cancelled && setState({ scene, error: "", loading: false }))
-        .catch((e) => !cancelled && setState((s) => ({ scene: s.scene, error: `语法错误：${(e as Error).message}`, loading: false })));
+        .catch((e) => !cancelled && setState((s) => ({ scene: s.scene, error: tr("canvas.syntaxError", { msg: (e as Error).message }), loading: false })));
     }, delay);
     return () => {
       cancelled = true;
@@ -175,10 +176,10 @@ export function CanvasView({
   error,
   readOnly = true,
   legend = true,
-  emptyText = "还没有工作流。完成访谈并选定方案后，流程图会出现在这里。",
-  readonlyHint = "只读 · 通过对话修改",
-  wheelZoom = false,
-  fitToContent = false,
+  emptyText,
+  readonlyHint,
+  wheelZoom = true,
+  fitToContent = true,
 }: {
   scene: Scene | null;
   loading: boolean;
@@ -193,6 +194,10 @@ export function CanvasView({
   /** 为 true 时，每次出现新场景都会缩放到能看见全图 */
   fitToContent?: boolean;
 }) {
+  const { t } = useI18n();
+  const emptyMsg = emptyText ?? t("canvas.empty");
+  // 只读提示默认不显示；需要时由调用方通过 readonlyHint 传入文案
+  const hintMsg = readonlyHint ?? "";
   // API 与它所属的场景绑定：场景变化后 Excalidraw 会重新挂载，旧的 API 自动失效
   const [bound, setBound] = useState<{ scene: Scene; api: ExcalidrawAPI } | null>(null);
   const [viewport, setViewport] = useState<Viewport | null>(null);
@@ -211,16 +216,13 @@ export function CanvasView({
       e.stopPropagation();
       const st = api.getAppState();
       const rect = el.getBoundingClientRect();
-      const px = e.clientX - rect.left;
-      const py = e.clientY - rect.top;
-      const z = st.zoom.value;
-      // 缩放前后，鼠标指向的场景坐标保持不变：视口坐标 = (场景坐标 + scroll) * zoom
-      const sceneX = px / z - st.scrollX;
-      const sceneY = py / z - st.scrollY;
-      const nz = Math.min(Math.max(z * Math.exp(-e.deltaY * 0.002), 0.1), 30);
-      api.updateScene({
-        appState: { zoom: { value: nz as any }, scrollX: px / nz - sceneX, scrollY: py / nz - sceneY },
-      });
+      const next = zoomAt(
+        { zoom: st.zoom.value, scrollX: st.scrollX, scrollY: st.scrollY },
+        e.clientX - rect.left,
+        e.clientY - rect.top,
+        wheelZoomFactor(e.deltaY),
+      );
+      api.updateScene({ appState: { zoom: { value: next.zoom as any }, scrollX: next.scrollX, scrollY: next.scrollY } });
     };
     el.addEventListener("wheel", onWheel, { capture: true, passive: false });
     return () => el.removeEventListener("wheel", onWheel, { capture: true });
@@ -247,9 +249,9 @@ export function CanvasView({
     <div className="canvas-host" ref={hostRef}>
       {legend && (
         <div className="legend">
-          <span><span className="dot det" /> 脚本执行</span>
-          <span><span className="dot llm" /> AI 执行</span>
-          <span><span className="dot hum" /> 需要人工</span>
+          <span><span className="dot det" /> {t("canvas.legendDet")}</span>
+          <span><span className="dot llm" /> {t("canvas.legendLlm")}</span>
+          <span><span className="dot hum" /> {t("canvas.legendHum")}</span>
         </div>
       )}
       {/* 已有场景时报错只占顶部一条，不挡住上一次成功的图 */}
@@ -264,7 +266,7 @@ export function CanvasView({
       {scene && api && <Minimap elements={scene.elements as MiniElement[]} api={api} viewport={viewport} />}
       {!scene && !error && (
         <div className="empty" style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}>
-          {loading ? "正在绘制流程图…" : emptyText}
+          {loading ? t("canvas.drawing") : emptyMsg}
         </div>
       )}
       {scene && (
@@ -273,7 +275,7 @@ export function CanvasView({
           initialData={{
             elements: scene.elements as any,
             files: scene.files as any,
-            appState: { viewBackgroundColor: "#FFFEFA", zenModeEnabled: false, gridModeEnabled: false },
+            appState: { viewBackgroundColor: "transparent", zenModeEnabled: false, gridModeEnabled: false },
             scrollToContent: true,
           }}
           excalidrawAPI={handleApi}
@@ -285,7 +287,7 @@ export function CanvasView({
         />
       )}
       {/* 放在画布之后渲染，避免被 Excalidraw 的层叠盖住 */}
-      {readOnly && readonlyHint && <span className="readonly">{readonlyHint}</span>}
+      {readOnly && hintMsg && <span className="readonly">{hintMsg}</span>}
     </div>
   );
 }

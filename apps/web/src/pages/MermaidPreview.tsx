@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, ty
 import { exportToBlob, exportToSvg } from "@excalidraw/excalidraw";
 import { Topbar } from "../components/Topbar";
 import { CanvasView, useMermaidScene } from "../components/CanvasView";
+import { useI18n } from "../i18n";
 
 const DRAFT_KEY = "aif:mermaid-draft";
 const WIDTH_KEY = "aif:mermaid-editor-width";
@@ -60,6 +61,7 @@ function download(blob: Blob, name: string) {
 
 /** Mermaid 预览：左边粘贴 mermaid 语法，右边实时渲染。纯前端，不保存到服务端。 */
 export default function MermaidPreviewPage() {
+  const { t } = useI18n();
   const [src, setSrc] = useState(loadDraft);
   const { scene, loading, error } = useMermaidScene(src);
   const [exportErr, setExportErr] = useState("");
@@ -117,7 +119,7 @@ export default function MermaidPreviewPage() {
         download(new Blob([svg.outerHTML], { type: "image/svg+xml" }), "mermaid.svg");
       }
     } catch (e) {
-      setExportErr(`导出失败：${(e as Error).message}`);
+      setExportErr(t("mmd.exportFail", { msg: (e as Error).message }));
     }
   };
 
@@ -144,7 +146,7 @@ export default function MermaidPreviewPage() {
     try {
       await navigator.clipboard.writeText(src);
     } catch {
-      setExportErr("复制失败：浏览器不允许访问剪贴板");
+      setExportErr(t("mmd.copyFail"));
     }
   };
 
@@ -169,18 +171,18 @@ export default function MermaidPreviewPage() {
               value={src}
               onChange={(e) => setSrc(e.target.value)}
               spellCheck={false}
-              placeholder={"flowchart TD\n  A[开始] --> B[结束]"}
-              aria-label="mermaid 代码"
+              placeholder={t("mmd.placeholder")}
+              aria-label={t("mmd.codeLabel")}
             />
-            {loading && <span className="mmd-loading">渲染中…</span>}
+            {loading && <span className="mmd-loading">{t("mmd.rendering")}</span>}
             <div className="menu-wrap mmd-menu" ref={menuRef}>
               <button
                 type="button"
                 className="mmd-menu-btn"
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
-                aria-label="菜单"
-                title="菜单"
+                aria-label={t("mmd.menu")}
+                title={t("mmd.menu")}
                 onClick={() => setMenuOpen((v) => !v)}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -191,11 +193,11 @@ export default function MermaidPreviewPage() {
               </button>
               {menuOpen && (
                 <div className="pop-menu" role="menu">
-                  <button type="button" role="menuitem" onClick={copySrc} disabled={!src}>复制代码</button>
-                  <button type="button" role="menuitem" onClick={clearSrc} disabled={!src}>删除代码</button>
+                  <button type="button" role="menuitem" onClick={copySrc} disabled={!src}>{t("mmd.copyCode")}</button>
+                  <button type="button" role="menuitem" onClick={clearSrc} disabled={!src}>{t("mmd.clearCode")}</button>
                   <hr />
-                  <button type="button" role="menuitem" onClick={() => runExport("png")} disabled={!scene}>导出 PNG</button>
-                  <button type="button" role="menuitem" onClick={() => runExport("svg")} disabled={!scene}>导出 SVG</button>
+                  <button type="button" role="menuitem" onClick={() => runExport("png")} disabled={!scene}>{t("mmd.exportPng")}</button>
+                  <button type="button" role="menuitem" onClick={() => runExport("svg")} disabled={!scene}>{t("mmd.exportSvg")}</button>
                 </div>
               )}
             </div>
@@ -206,7 +208,7 @@ export default function MermaidPreviewPage() {
           className="mmd-splitter"
           role="separator"
           aria-orientation="vertical"
-          aria-label="拖动调整左右宽度"
+          aria-label={t("mmd.resize")}
           aria-valuenow={editorW}
           tabIndex={0}
           onPointerDown={onSplitDown}
@@ -221,7 +223,7 @@ export default function MermaidPreviewPage() {
             loading={loading}
             error={error}
             legend={false}
-            emptyText="在左侧粘贴 mermaid 语法，流程图会出现在这里。"
+            emptyText={t("mmd.empty")}
             readonlyHint=""
             wheelZoom
             fitToContent

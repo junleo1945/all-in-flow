@@ -1,4 +1,5 @@
 import { ApiError, AUTH_EXPIRED_CODE, redirectToLogin } from "./api";
+import { currentLocale, tr } from "../i18n";
 
 export interface SseEvent {
   event: string;
@@ -53,9 +54,9 @@ export async function sendMessage(
     const body = await res.json().catch(() => null);
     if (res.status === 401 || body?.code === AUTH_EXPIRED_CODE) {
       redirectToLogin();
-      throw new ApiError(AUTH_EXPIRED_CODE, body?.message || "请重新登录", res.status);
+      throw new ApiError(AUTH_EXPIRED_CODE, body?.message || tr("common.relogin"), res.status);
     }
-    throw new ApiError(body?.code ?? res.status, body?.message || `请求失败 (HTTP ${res.status})`, res.status);
+    throw new ApiError(body?.code ?? res.status, body?.message || tr("common.requestFailedHttp", { status: res.status }), res.status);
   }
 
   const reader = res.body.getReader();

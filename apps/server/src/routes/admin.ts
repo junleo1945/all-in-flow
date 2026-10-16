@@ -7,13 +7,14 @@ import { usageDaily, users } from "../db/schema/index.js";
 import { today, todayTotalCost } from "../agent/quota.js";
 import { requireUser } from "../http/middleware.js";
 import type { AuthService } from "../auth/service.js";
+import { tm } from "../i18n.js";
 
 /** 管理员：当日用量（design.md 9.1 GET /api/admin/usage） */
 export function adminRoutes(deps: { db: Db; auth: AuthService; dailyCostLimitUsd: number }) {
   const r = new Hono<{ Variables: AppVariables }>();
   r.use("/*", requireUser(deps.auth));
   r.use("/*", async (c, next) => {
-    if (!c.get("user").isAdmin) throw new AppError(403, "需要管理员权限");
+    if (!c.get("user").isAdmin) throw new AppError(403, tm(c.get("locale"), "admin.required"));
     await next();
   });
 
