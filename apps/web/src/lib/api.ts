@@ -31,7 +31,8 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   const body = (await res.json().catch(() => null)) as Envelope<T> | null;
 
   if (res.status === 401 || body?.code === AUTH_EXPIRED_CODE) {
-    if (!path.startsWith("/user/")) redirectToLogin();
+    // 登录和退出本身不需要跳转：登录失败要留在页面上提示，退出后本来就去登录页
+    if (path !== "/user/login" && path !== "/user/logout") redirectToLogin();
     throw new ApiError(AUTH_EXPIRED_CODE, body?.message || "身份信息验证失败，请重新登录", res.status);
   }
   if (!body || typeof body !== "object" || !("code" in body)) {

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { formatTokens, useMe } from "../lib/useMe";
@@ -38,11 +38,63 @@ export function Topbar({ children, showUser = true }: { children?: ReactNode; sh
             </span>
             {formatTokens(me.usage.tokensToday)} / {formatTokens(me.usage.dailyTokenQuota)}
           </div>
-          <div className="avatar" aria-hidden="true">{me.DisplayName.slice(0, 1)}</div>
-          {me.DisplayName}
+          <UserMenu name={me.DisplayName} />
           <button type="button" className="logout" onClick={logout}>退出</button>
         </div>
       )}
     </header>
+  );
+}
+
+/** 头像菜单：左键或右键点击头像和用户名弹出，放与访谈无关的工具入口 */
+export function UserMenu({ name }: { name: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const go = (to: string) => {
+    setOpen(false);
+    navigate(to);
+  };
+
+  return (
+    <div className="user-menu" ref={ref}>
+      <button
+        type="button"
+        className="user-trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setOpen(true);
+        }}
+      >
+        <span className="avatar" aria-hidden="true">{name.slice(0, 1)}</span>
+        {name}
+      </button>
+      {open && (
+        <div className="pop-menu" role="menu">
+          <button type="button" role="menuitem" onClick={() => go("/mermaid")}>Mermaid 预览</button>
+          <button type="button" role="menuitem" onClick={() => go("/integrations")}>集成目录</button>
+        </div>
+      )}
+    </div>
   );
 }

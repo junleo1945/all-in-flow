@@ -121,6 +121,7 @@ a { color: inherit; }
 .rail.collapsed { padding: 14px 6px; }
 .rail.collapsed .rail-head { flex-direction: column; }
 .rail .item-row { position: relative; border-radius: 8px; }
+.rail .item-row.menu-open { z-index: 20; }
 .rail .item { padding: 9px 10px; border-radius: 8px; cursor: pointer; text-align: left; width: 100%; }
 .rail .item-row:hover .item, .rail .item:hover { background: var(--sheet); }
 .rail .item.on { background: var(--sheet); box-shadow: 0 0 0 1px var(--line); }
@@ -390,3 +391,56 @@ table.tasks { width: 100%; border-collapse: collapse; font-size: 13px; }
   .ep-tree { max-height: 160px; }
   .ep-pane { height: 52vh; }
 }
+
+/* 头像菜单 */
+.user-menu { position: relative; }
+.user-trigger { display: flex; align-items: center; gap: 10px; padding: 2px 8px 2px 2px; border-radius: 999px; color: inherit; }
+.user-trigger:hover, .user-trigger[aria-expanded="true"] { background: var(--sheet-2); box-shadow: 0 0 0 1px var(--line); }
+.pop-menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 160px; padding: 6px; background: var(--sheet); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 30px -14px rgba(60, 40, 10, .35); z-index: 50; display: flex; flex-direction: column; }
+.pop-menu button { text-align: left; padding: 7px 10px; border-radius: 6px; font-size: 13px; color: var(--ink-2); }
+.pop-menu button:hover, .pop-menu button:focus-visible { background: var(--sheet-2); color: var(--ink); }
+
+/* Mermaid 预览：左侧代码，右侧画布 */
+.mmd { flex: 1 1 auto; display: grid; grid-template-columns: var(--mmd-w, 420px) 6px minmax(0, 1fr); height: calc(100vh - 56px); min-height: 0; }
+.mmd-splitter { position: relative; cursor: col-resize; touch-action: none; user-select: none; }
+.mmd-splitter::before { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: var(--line); transition: background .15s; }
+.mmd-splitter:hover::before, .mmd-splitter:focus-visible::before { background: var(--ink-3); }
+.mmd-splitter:focus-visible { outline: 2px solid var(--ink-3); outline-offset: -2px; }
+.mmd-editor { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-right: 1px solid var(--line); background: var(--sheet); min-height: 0; }
+.mmd-editor h3 { font-family: var(--serif); font-size: 18px; font-weight: 900; }
+.mmd-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mmd-input { flex: 1 1 auto; min-height: 200px; resize: none; padding: 12px; border: 1px solid var(--line-2); border-radius: 8px; background: #fff; font: 13px/1.6 var(--mono); outline: none; tab-size: 2; }
+.mmd-input:focus { border-color: var(--ink); box-shadow: 0 0 0 3px rgba(28, 27, 24, .08); }
+.mmd-canvas { position: relative; min-height: 0; }
+@media (max-width: 760px) {
+  .mmd { grid-template-columns: 1fr; grid-template-rows: auto minmax(420px, 1fr); height: auto; }
+  .mmd-splitter { display: none; }
+  .mmd-editor { border-right: none; border-bottom: 1px solid var(--line); }
+  .mmd-input { min-height: 220px; }
+}
+
+/* Mermaid 预览：图标按钮；隐藏 Excalidraw 左下角的菜单按钮 */
+.icon-btn { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--line-2); color: var(--ink-2); background: var(--sheet); }
+.icon-btn:hover:not(:disabled) { border-color: var(--ink-3); color: var(--ink); }
+.mmd-canvas .main-menu-trigger { display: none !important; }
+
+/* Mermaid 预览：左栏顶部菜单 */
+.mmd-head { justify-content: flex-end; min-height: 30px; }
+.menu-wrap { position: relative; }
+.pop-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
+.pop-menu button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Mermaid 预览：代码框右上角的轻量菜单按钮（hover 才显示底色），避开滚动条 */
+.mmd-input-wrap { position: relative; flex: 1 1 auto; display: flex; min-height: 200px; }
+.mmd-input-wrap .mmd-input { flex: 1 1 auto; min-height: 0; width: 100%; padding-right: 44px; }
+.mmd-menu { position: absolute; top: 8px; right: 30px; z-index: 2; }
+.mmd-menu-btn { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; color: var(--ink-3); background: transparent; }
+.mmd-menu-btn:hover, .mmd-menu-btn[aria-expanded="true"] { background: var(--sheet-2); color: var(--ink); }
+.mmd-loading { position: absolute; left: 12px; bottom: 8px; font-size: 12px; color: var(--ink-3); }
+
+/* Mermaid 预览：代码框滚动条，细条 + 项目配色 */
+.mmd-input { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.mmd-input::-webkit-scrollbar { width: 8px; }
+.mmd-input::-webkit-scrollbar-track { background: transparent; }
+.mmd-input::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; border: 2px solid var(--sheet); }
+.mmd-input::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
