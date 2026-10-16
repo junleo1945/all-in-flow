@@ -7,6 +7,7 @@ import { workflows } from "../db/schema/index.js";
 import { migrateIr, validateWorkflow } from "@aif/workflow-ir";
 import { findOperation } from "@aif/integrations";
 import { desc, eq } from "drizzle-orm";
+import { tm } from "../i18n.js";
 
 export function workflowRoutes(deps: { db: Db }) {
   const r = new Hono<{ Variables: AppVariables }>();
@@ -45,7 +46,7 @@ export function workflowRoutes(deps: { db: Db }) {
     const userId = c.get("user").id;
     const wf = await guard(() => getWorkflowForUser(deps.db, userId, c.req.param("id")));
     const version = Number(c.req.param("version"));
-    if (!Number.isInteger(version) || version < 1) throw new AppError(400, "版本号无效");
+    if (!Number.isInteger(version) || version < 1) throw new AppError(400, tm(c.get("locale"), "wf.badVersion"));
     const row = await guard(() => getVersion(deps.db, wf.id, version));
     return ok(c, { workflowId: wf.id, version: row.version, ir: migrateIr(row.ir), createdAt: row.createdAt });
   });
@@ -58,11 +59,11 @@ export function workflowRoutes(deps: { db: Db }) {
     const userId = c.get("user").id;
     const wf = await guard(() => getWorkflowForUser(deps.db, userId, c.req.param("id")));
     const body = (await c.req.json().catch(() => null)) as { ir?: unknown } | null;
-    if (!body || typeof body.ir !== "object" || body.ir === null) throw new AppError(400, "缺少工作流内容");
+    if (!body || typeof body.ir !== "object" || body.ir === null) throw new AppError(400, tm(c.get("locale"), "wf.missingIr"));
     const result = validateWorkflow(body.ir, { resolveOperation: findOperation });
     if (!result.ok) {
       const errors = result.issues.filter((i) => i.level === "error").map((i) => i.message);
-      throw new AppError(400, `工作流校验未通过：${errors.slice(0, 3).join("；")}`);
+      throw new AppError(400, tm(c.get("locale"), "wf.invalid", { errors: errors.slice(0, 3).join("；") }));
     }
     const version = await guard(() => addVersion(deps.db, userId, wf.id, result.ir));
     return ok(c, { workflowId: wf.id, version });

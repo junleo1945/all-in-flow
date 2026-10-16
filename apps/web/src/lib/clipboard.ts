@@ -1,3 +1,5 @@
+import { tr } from "../i18n";
+
 /**
  * 复制文本到剪贴板。HTTP 部署（非安全上下文）下 navigator.clipboard 不可用，
  * 这时退回 textarea + execCommand('copy')。
@@ -20,5 +22,5 @@ export async function copyText(text: string): Promise<void> {
   area.select();
   const ok = document.execCommand("copy");
   area.remove();
-  if (!ok) throw new Error("复制失败，请手动选中内容后复制");
+  if (!ok) throw new Error(tr("clip.fail"));
 }

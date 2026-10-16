@@ -1,3 +1,4 @@
+import { tr } from "../i18n";
 import type { Candidate, PainPoint, Profile, Task } from "./types";
 
 /** 对话时间线中的一项 */
@@ -63,11 +64,11 @@ export function applyEvent(items: Item[], e: ServerEvent, nextId: () => string):
       const ir = e.data?.ir;
       return [
         ...closed,
-        { kind: "workflow", id: nextId(), workflowId: e.data?.workflowId, version: e.data?.version, name: ir?.name ?? "工作流" },
+        { kind: "workflow", id: nextId(), workflowId: e.data?.workflowId, version: e.data?.version, name: ir?.name ?? tr("timeline.workflowDefault") },
       ];
     }
     case "error":
-      return [...closeStreaming(items), { kind: "error", id: nextId(), text: e.data?.message ?? "处理失败" }];
+      return [...closeStreaming(items), { kind: "error", id: nextId(), text: e.data?.message ?? tr("timeline.failed") }];
     case "done":
       return closeStreaming(items);
     default:

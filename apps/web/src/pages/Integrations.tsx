@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { INTEGRATION_CATALOG, type IntegrationEntry } from "@aif/integrations";
 import { api, ApiError } from "../lib/api";
 import { Topbar } from "../components/Topbar";
+import { useI18n } from "../i18n";
 
 interface McpTool {
   name: string;
@@ -15,6 +16,7 @@ interface McpTestResult {
 }
 
 export default function IntegrationsPage() {
+  const { t } = useI18n();
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -29,7 +31,7 @@ export default function IntegrationsPage() {
       const r = await api.post<McpTestResult>("/integrations/mcp-test", { url: url.trim() });
       setResult(r);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "测试失败，请稍后再试");
+      setError(err instanceof ApiError ? err.message : t("integ.testFailed"));
     } finally {
       setBusy(false);
       setUrl(""); // 测试完成后立即清空地址，不在页面上保留
@@ -42,20 +44,20 @@ export default function IntegrationsPage() {
       <div className="home" style={{ gridTemplateColumns: "1fr", maxWidth: 820, margin: "0 auto", width: "100%" }}>
         <div>
           <div className="greet">
-            集成连接测试
-            <small>测试 MCP 服务能否连接，并查看它提供的工具。</small>
+            {t("integ.title")}
+            <small>{t("integ.subtitle")}</small>
           </div>
 
-          <div className="sec-title"><h3>集成目录</h3><span>{INTEGRATION_CATALOG.length} 个</span></div>
+          <div className="sec-title"><h3>{t("integ.catalog")}</h3><span>{t("integ.catalogCount", { n: INTEGRATION_CATALOG.length })}</span></div>
           <div className="convs" style={{ gridTemplateColumns: "1fr 1fr" }}>
             {INTEGRATION_CATALOG.map((e) => (
               <CatalogCard key={e.id} entry={e} />
             ))}
           </div>
 
-          <div className="sec-title"><h3>MCP 连接测试</h3><span>只用于本次测试，不保存</span></div>
+          <div className="sec-title"><h3>{t("integ.mcpTest")}</h3><span>{t("integ.notSaved")}</span></div>
           <form className="card starter" onSubmit={test}>
-            <label htmlFor="mcp-url" className="muted" style={{ display: "block", marginBottom: 8 }}>MCP 服务地址（https）</label>
+            <label htmlFor="mcp-url" className="muted" style={{ display: "block", marginBottom: 8 }}>{t("integ.urlLabel")}</label>
             <input
               id="mcp-url"
               className="input"
@@ -68,9 +70,9 @@ export default function IntegrationsPage() {
               required
             />
             <div className="starter-foot">
-              <span className="muted">地址只用于本次测试，不会被保存。地址中的 key 属于凭证，请勿分享此页面的截图。</span>
+              <span className="muted">{t("integ.urlNote")}</span>
               <button className="btn btn-ink" style={{ marginLeft: "auto" }} disabled={busy || !url.trim()}>
-                {busy ? "测试中…" : "测试连接"}
+                {busy ? t("integ.testing") : t("integ.test")}
               </button>
             </div>
           </form>
@@ -79,50 +81,50 @@ export default function IntegrationsPage() {
 
           {result && (
             <div className="card side-card" style={{ marginTop: 16 }}>
-              <h3>连接成功{result.serverName ? `：${result.serverName}` : ""}</h3>
-              <div className="muted" style={{ marginBottom: 12 }}>共 {result.tools.length} 个工具</div>
+              <h3>{result.serverName ? t("integ.connectedName", { name: result.serverName }) : t("integ.connected")}</h3>
+              <div className="muted" style={{ marginBottom: 12 }}>{t("integ.toolCount", { n: result.tools.length })}</div>
               <ul className="list">
-                {result.tools.map((t) => (
-                  <li key={t.name}>
+                {result.tools.map((tool) => (
+                  <li key={tool.name}>
                     <div className="grow">
-                      <div className="mono" style={{ fontWeight: 600 }}>{t.name}</div>
-                      {t.description && <div className="s">{t.description}</div>}
+                      <div className="mono" style={{ fontWeight: 600 }}>{tool.name}</div>
+                      {tool.description && <div className="s">{tool.description}</div>}
                     </div>
                   </li>
                 ))}
               </ul>
               <div className="muted" style={{ marginTop: 12 }}>
-                把这些工具名告诉开发者，就可以补全集成目录里的条目。
+                {t("integ.toolHint")}
               </div>
             </div>
           )}
 
-          <p style={{ marginTop: 24 }}><Link to="/">返回首页</Link></p>
+          <p style={{ marginTop: 24 }}><Link to="/">{t("common.backHome")}</Link></p>
         </div>
       </div>
     </div>
   );
 }
 
-const ACCESS_LABEL: Record<IntegrationEntry["access"], string> = {
-  mcp: "MCP",
-  api: "API",
-  cli: "命令行",
-  webhook: "Webhook",
-  manual: "人工",
-};
-
 function CatalogCard({ entry }: { entry: IntegrationEntry }) {
+  const { t } = useI18n();
+  const ACCESS_LABEL: Record<IntegrationEntry["access"], string> = {
+    mcp: "MCP",
+    api: "API",
+    cli: t("integ.access.cli"),
+    webhook: "Webhook",
+    manual: t("integ.access.manual"),
+  };
   return (
     <div className="card" style={{ padding: 16 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
         <b>{entry.name}</b>
         <span className="tag">{ACCESS_LABEL[entry.access]}</span>
-        {entry.verified ? <span className="st">已验证</span> : <span className="st off">未验证</span>}
+        {entry.verified ? <span className="st">{t("integ.verified")}</span> : <span className="st off">{t("integ.unverified")}</span>}
       </div>
       <div className="muted" style={{ marginBottom: 8 }}>{entry.summary}</div>
       <div className="muted">
-        需要配置：{entry.fields.length ? entry.fields.map((f) => <span key={f.name} className="mono" style={{ marginRight: 8 }}>{f.name}</span>) : "无"}
+        {t("integ.needConfig")}{entry.fields.length ? entry.fields.map((f) => <span key={f.name} className="mono" style={{ marginRight: 8 }}>{f.name}</span>) : t("integ.none")}
       </div>
     </div>
   );

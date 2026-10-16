@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { copyText } from "../lib/clipboard";
 import { buildFileTree, type TreeNode } from "../lib/fileTree";
+import { useI18n } from "../i18n";
 
 export interface PreviewFile {
   path: string;
@@ -22,6 +23,7 @@ export interface ExportPreviewSpec {
  * 通过 portal 挂在 body 上，避免被导出菜单的定位和层级影响。
  */
 export function ExportPreview({ spec, onClose, top }: { spec: ExportPreviewSpec; onClose: () => void; top?: ReactNode }) {
+  const { t } = useI18n();
   const [active, setActive] = useState(spec.files[0]?.path ?? "");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -46,7 +48,7 @@ export function ExportPreview({ spec, onClose, top }: { spec: ExportPreviewSpec;
       await copyText(text);
       setCopied(true);
     } catch (e) {
-      setErr((e as Error).message || "复制失败");
+      setErr((e as Error).message || t("exp.copyFail"));
     }
   };
 
@@ -56,7 +58,7 @@ export function ExportPreview({ spec, onClose, top }: { spec: ExportPreviewSpec;
     try {
       await spec.onDownload();
     } catch (e) {
-      setErr((e as Error).message || "下载失败");
+      setErr((e as Error).message || t("exp.downloadFail"));
     } finally {
       setBusy(false);
     }
@@ -65,7 +67,7 @@ export function ExportPreview({ spec, onClose, top }: { spec: ExportPreviewSpec;
   return createPortal(
     <div className="modal-back export-preview-back" onClick={onClose}>
       <div className="card modal export-preview" role="dialog" aria-label={spec.title} onClick={(e) => e.stopPropagation()}>
-        <button className="x" onClick={onClose} aria-label="关闭">×</button>
+        <button className="x" onClick={onClose} aria-label={t("exp.close")}>×</button>
         <h2>{spec.title}</h2>
         {spec.notes.length > 0 && (
           <div className="ep-notes">
@@ -77,7 +79,7 @@ export function ExportPreview({ spec, onClose, top }: { spec: ExportPreviewSpec;
         {top}
         <div className={`ep-body${spec.files.length > 1 ? "" : " single"}`}>
           {spec.files.length > 1 && (
-            <nav className="ep-tree" aria-label="文件列表">
+            <nav className="ep-tree" aria-label={t("exp.fileList")}>
               {renderTree(tree, 0, file?.path ?? "", setActive)}
             </nav>
           )}
@@ -85,10 +87,10 @@ export function ExportPreview({ spec, onClose, top }: { spec: ExportPreviewSpec;
             <div className="ep-bar">
               <span className="mono ep-path" title={file?.path}>{file?.path}</span>
               <button className="btn btn-line" disabled={text === null} onClick={copy}>
-                {copied ? "已复制" : "复制"}
+                {copied ? t("exp.copied") : t("exp.copy")}
               </button>
             </div>
-            {text === null ? <p className="muted ep-empty">这是二进制文件，无法预览，请下载后查看。</p> : <pre className="ep-code">{text}</pre>}
+            {text === null ? <p className="muted ep-empty">{t("exp.binary")}</p> : <pre className="ep-code">{text}</pre>}
           </section>
         </div>
         <div className="ep-foot">

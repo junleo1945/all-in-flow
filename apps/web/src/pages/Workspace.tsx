@@ -5,7 +5,8 @@ import { api, ApiError } from "../lib/api";
 import { sendMessage } from "../lib/sse";
 import { applyEvent, applyProfilePatch, closeStreaming, historyToItems, type Item } from "../lib/timeline";
 import { emptyProfile } from "../lib/profile";
-import { STAGE_LABELS, type Profile, type PainPoint } from "../lib/types";
+import { displayTitle, tr, useI18n } from "../i18n";
+import { stageLabels, stageLabel, type Profile, type PainPoint } from "../lib/types";
 import { Topbar } from "../components/Topbar";
 import { Chat } from "../components/Chat";
 import { ProfilePanel } from "../components/ProfilePanel";
@@ -44,7 +45,8 @@ const PANEL_ICON = (
 const RAIL_COLLAPSED_W = 44;
 const RAIL_OPEN_KEY = "aif-rail-open";
 const SPLITTER_W = 6;
-const PANEL_W_MIN = 360;
+// 画布面板的最小宽度：要放下「画布 / 工作画像」切换、版本、分享、导出这一行
+const PANEL_W_MIN = 400;
 
 // 历史访谈栏是否展开，记住上次的状态
 function readRailOpen(): boolean {
@@ -69,11 +71,40 @@ function clampChatWidth(w: number): number {
   return Math.min(max, Math.max(CHAT_W_MIN, Math.round(w)));
 }
 
-const HINTS: Array<{ label: string; text: string; prefill?: boolean; intent?: "generate_now" }> = [
-  { label: "直接生成工作流", text: "请直接给我方案并生成工作流，基于现在已有的信息，缺的标为待确认。", intent: "generate_now" },
-  { label: "换一个痛点", text: "这个先不聊了，换一个痛点来聊。" },
-  { label: "这一步不对", text: "这一步不对：", prefill: true },
-];
+function makeHints(): Array<{ label: string; text: string; prefill?: boolean; intent?: "generate_now" }> {
+  return [
+    { label: tr("ws.hintGenerate"), text: tr("ws.hintGenerateText"), intent: "generate_now" },
+    { label: tr("ws.hintSwitch"), text: tr("ws.hintSwitchText") },
+    { label: tr("ws.hintWrong"), text: tr("ws.hintWrongText"), prefill: true },
+  ];
+}
+
+/** 顶栏的访谈阶段：平时只显示当前阶段和分段进度，悬停或聚焦时展开全部阶段 */
+function StageProgress({ index }: { index: number }) {
+  const { t } = useI18n();
+  const stages = stageLabels();
+  const cur = Math.max(0, index);
+  const total = stages.length;
+  const state = (i: number) => (i < cur ? "done" : i === cur ? "cur" : "todo");
+  return (
+    <div className="stage" tabIndex={0} aria-label={t("stage.ariaLabel", { cur: cur + 1, total, name: stages[cur].label })}>
+      <span className="stage-num">{cur + 1}<span>/{total}</span></span>
+      <span className="stage-name">{stages[cur].label}</span>
+      <span className="stage-track" aria-hidden="true">
+        {stages.map((s, i) => <i key={s.key} className={state(i)} />)}
+      </span>
+      <ol className="stage-pop">
+        {stages.map((s, i) => (
+          <li key={s.key} className={state(i)}>
+            <span className="n">{i < cur ? "✓" : i + 1}</span>
+            {s.label}
+            {i === cur && <em>{t("stage.inProgress")}</em>}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
 
 export default function WorkspacePage() {
   const { id = "" } = useParams();
@@ -82,6 +113,8 @@ export default function WorkspacePage() {
   const initial = (location.state as { initial?: string } | null)?.initial;
   const { me } = useMe();
   const feedback = useFeedback();
+  const { t } = useI18n();
+  const hints = makeHints();
 
   const [loadError, setLoadError] = useState("");
   const [title, setTitle] = useState("");
@@ -99,11 +132,19 @@ export default function WorkspacePage() {
   const [convList, setConvList] = useState<ConvRow[]>([]);
   const [versions, setVersions] = useState<number[]>([]);
   const [railOpen, setRailOpen] = useState<boolean>(readRailOpen);
+  // 窄屏下历史访谈以抽屉形式从顶栏打开，和桌面端的折叠状态互不影响
+  const [mobileRailOpen, setMobileRailOpen] = useState(false);
+  const railExpanded = railOpen || mobileRailOpen;
   // 右侧画布面板：还没有工作流时隐藏，有工作流后可手动收起 / 展开
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; title: string } | null>(null);
   const renameCancelled = useRef(false);
+
+  // 切换访谈后收起窄屏抽屉
+  useEffect(() => {
+    setMobileRailOpen(false);
+  }, [id]);
 
   // 点击菜单以外的地方时关闭左栏的操作菜单
   useEffect(() => {
@@ -124,7 +165,14 @@ export default function WorkspacePage() {
 
   const scene = useScene(ir);
 
-  const [chatW, setChatW] = useState<number>(readChatWidth);
+  // 初始宽度也要按当前窗口夹紧：之前存下的宽度可能是在更宽的窗口里拖出来的
+  const [chatW, setChatW] = useState<number>(() => clampChatWidth(readChatWidth()));
+  // 窗口变窄时，把对话区宽度重新夹紧，避免画布面板被挤出可视区域
+  useEffect(() => {
+    const onResize = () => setChatW((w) => clampChatWidth(w));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   const [resizing, setResizing] = useState(false);
   const dragRef = useRef<{ startX: number; startW: number } | null>(null);
   const saveChatW = (w: number) => {
@@ -210,7 +258,7 @@ export default function WorkspacePage() {
           void sendRef.current(first);
         }
       } catch (e) {
-        if (!cancelled) setLoadError(e instanceof ApiError ? e.message : "加载失败");
+        if (!cancelled) setLoadError(e instanceof ApiError ? e.message : t("ws.loadFailed"));
       }
     })();
     api.get<ExporterInfo[]>("/exporters").then(setExporters).catch(() => {});
@@ -289,23 +337,23 @@ export default function WorkspacePage() {
     try {
       await api.patch(`/conversations/${c.id}`, { title });
     } catch {
-      feedback.toast("重命名失败，请稍后再试", "err");
+      feedback.toast(t("ws.renameFailed"), "err");
     }
     loadConvs();
   };
 
   const removeConv = async (c: ConvRow) => {
     const ok = await feedback.confirm({
-      title: "删除访谈",
-      message: `确定删除「${c.title}」吗？删除后无法恢复。`,
-      confirmText: "删除",
+      title: t("ws.deleteTitle"),
+      message: t("ws.deleteConfirm", { title: displayTitle(c.title) }),
+      confirmText: t("ws.delete"),
       danger: true,
     });
     if (!ok) return;
     try {
       await api.delete(`/conversations/${c.id}`);
     } catch {
-      feedback.toast("删除失败，请稍后再试", "err");
+      feedback.toast(t("ws.deleteFailed"), "err");
       return;
     }
     if (c.id === id) nav("/");
@@ -330,7 +378,7 @@ export default function WorkspacePage() {
             if (e.event === "stage") setStage(data.stage);
             if (e.event === "workflow") {
               const d = data;
-              setSelected({ workflowId: d.workflowId, name: d.ir?.name ?? "工作流", version: d.version, latestVersion: d.version });
+              setSelected({ workflowId: d.workflowId, name: d.ir?.name ?? tr("timeline.workflowDefault"), version: d.version, latestVersion: d.version });
               setIr(d.ir);
             }
             setItems((prev) => applyEvent(prev, e, nextId));
@@ -341,7 +389,7 @@ export default function WorkspacePage() {
         );
       } catch (e) {
         if ((e as Error).name !== "AbortError") {
-          setItems((prev) => [...closeStreaming(prev), { kind: "error", id: nextId(), text: e instanceof ApiError ? e.message : "发送失败，请稍后再试" }]);
+          setItems((prev) => [...closeStreaming(prev), { kind: "error", id: nextId(), text: e instanceof ApiError ? e.message : tr("ws.sendFailed") }]);
         }
       } finally {
         abortRef.current = null;
@@ -385,7 +433,7 @@ export default function WorkspacePage() {
         <div key={c.id} className="item-row on">
           <input
             className="item-edit"
-            aria-label="访谈标题"
+            aria-label={t("ws.convTitleAria")}
             autoFocus
             maxLength={100}
             value={editing.title}
@@ -407,13 +455,13 @@ export default function WorkspacePage() {
     return (
       <div key={c.id} className={`item-row ${c.id === id ? "on" : ""} ${open ? "menu-open" : ""}`}>
         <button className={`item ${c.id === id ? "on" : ""}`} onClick={() => nav(`/c/${c.id}`)}>
-          <b>{c.title}</b>
-          <span>{STAGE_LABELS.find((s) => s.key === c.stage)?.label ?? "刚开始"}</span>
+          <b>{displayTitle(c.title)}</b>
+          <span>{stageLabel(c.stage) ?? t("stage.notStarted")}</span>
         </button>
         <div className="conv-menu-wrap">
           <button
             className="item-more"
-            aria-label="更多操作"
+            aria-label={t("ws.moreActions")}
             aria-haspopup="menu"
             aria-expanded={open}
             onClick={() => setMenuId(open ? null : c.id)}
@@ -427,10 +475,10 @@ export default function WorkspacePage() {
           {open && (
             <div className="conv-menu" role="menu">
               <button role="menuitem" onClick={() => { setMenuId(null); void togglePin(c); }}>
-                {c.pinnedAt ? "取消置顶" : "置顶"}
+                {c.pinnedAt ? t("ws.unpin") : t("ws.pin")}
               </button>
-              <button role="menuitem" onClick={() => startRename(c)}>重命名</button>
-              <button role="menuitem" className="danger" onClick={() => { setMenuId(null); void removeConv(c); }}>删除</button>
+              <button role="menuitem" onClick={() => startRename(c)}>{t("ws.rename")}</button>
+              <button role="menuitem" className="danger" onClick={() => { setMenuId(null); void removeConv(c); }}>{t("ws.delete")}</button>
             </div>
           )}
         </div>
@@ -438,7 +486,7 @@ export default function WorkspacePage() {
     );
   };
 
-  const stepIndex = STAGE_LABELS.findIndex((s) => s.key === stage);
+  const stepIndex = stageLabels().findIndex((s) => s.key === stage);
   const hasWorkflow = !!selected;
   const showPanel = hasWorkflow && !panelCollapsed;
 
@@ -448,51 +496,51 @@ export default function WorkspacePage() {
         <Topbar />
         <div style={{ padding: 40 }}>
           <div className="notice-error">{loadError}</div>
-          <p style={{ marginTop: 16 }}><Link to="/">返回首页</Link></p>
+          <p style={{ marginTop: 16 }}><Link to="/">{t("ws.backHome")}</Link></p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="page">
+    <div className="page ws-page">
       <Topbar>
-        <nav className="stepper" aria-label="访谈阶段">
-          {STAGE_LABELS.map((s, i) => (
-            <span key={s.key} style={{ display: "contents" }}>
-              {i > 0 && <span className="step-sep" />}
-              <span className={`step ${i < stepIndex ? "done" : i === stepIndex ? "cur" : ""}`}>
-                <span className="n">{i < stepIndex ? "✓" : i + 1}</span>{s.label}
-              </span>
-            </span>
-          ))}
-        </nav>
-        <span className="muted" style={{ marginLeft: "auto", marginRight: 8, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+        <button type="button" className="rail-mobile-btn" onClick={() => setMobileRailOpen(true)} aria-label={t("ws.openRail")}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+            <path d="M3 5h12M3 9h12M3 13h12" />
+          </svg>
+        </button>
+        <div className="ws-context">
+          <span className="crumb-sep" aria-hidden="true">/</span>
+          <span className="crumb-title" title={displayTitle(title)}>{displayTitle(title) || t("ws.untitled")}</span>
+          <StageProgress index={stepIndex} />
+        </div>
       </Topbar>
 
       <div
         className={`ws ${resizing ? "resizing" : ""} ${showPanel ? "" : "no-panel"}`}
         style={{ "--chat-w": `${chatW}px`, "--rail-w": `${railOpen ? RAIL_W : RAIL_COLLAPSED_W}px` } as CSSProperties}
       >
-        <aside className={`rail ${railOpen ? "" : "collapsed"}`}>
+        {mobileRailOpen && <div className="rail-backdrop" onClick={() => setMobileRailOpen(false)} aria-hidden="true" />}
+        <aside className={`rail ${railExpanded ? "" : "collapsed"} ${mobileRailOpen ? "mobile-open" : ""}`}>
           <div className="rail-head">
-            <button className="rail-toggle" onClick={toggleRail} aria-label={railOpen ? "收起历史访谈" : "展开历史访谈"}>
+            <button className="rail-toggle rail-collapse" onClick={toggleRail} aria-label={railOpen ? t("ws.collapseRail") : t("ws.expandRail")}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
                 <rect x="2" y="2.5" width="12" height="11" rx="2" />
                 <path d="M6 2.5v11" />
               </svg>
             </button>
-            {railOpen ? (
-              <button className="btn btn-ink new" onClick={newConversation}>＋ 新建访谈</button>
+            {railExpanded ? (
+              <button className="btn btn-ink new" onClick={newConversation}>{t("ws.newConv")}</button>
             ) : (
-              <button className="rail-toggle" onClick={newConversation} aria-label="新建访谈">＋</button>
+              <button className="rail-toggle" onClick={newConversation} aria-label={t("ws.newConvAria")}>＋</button>
             )}
           </div>
-          {railOpen && (
+          {railExpanded && (
             <>
-              {convList.some((c) => c.pinnedAt) && <div className="group">置顶</div>}
+              {convList.some((c) => c.pinnedAt) && <div className="group">{t("ws.pinned")}</div>}
               {convList.filter((c) => c.pinnedAt).map((c) => renderConvItem(c))}
-              {convList.some((c) => c.pinnedAt) && convList.some((c) => !c.pinnedAt) && <div className="group">最近</div>}
+              {convList.some((c) => c.pinnedAt) && convList.some((c) => !c.pinnedAt) && <div className="group">{t("ws.recent")}</div>}
               {convList.filter((c) => !c.pinnedAt).map((c) => renderConvItem(c))}
             </>
           )}
@@ -507,7 +555,7 @@ export default function WorkspacePage() {
           onSend={(text, ids) => void send(text, ids)}
           onChoice={answerChoice}
           onStop={() => { abortRef.current?.abort(); void api.post(`/conversations/${id}/abort`).catch(() => {}); }}
-          hints={HINTS}
+          hints={hints}
           onHint={(h) => void send(h.text, [], h.intent)}
         />
 
@@ -517,7 +565,7 @@ export default function WorkspacePage() {
           className={`splitter ${resizing ? "active" : ""}`}
           role="separator"
           aria-orientation="vertical"
-          aria-label="拖动调整对话区宽度"
+          aria-label={t("ws.splitterAria")}
           aria-valuenow={chatW}
           tabIndex={0}
           onPointerDown={onSplitDown}
@@ -531,23 +579,23 @@ export default function WorkspacePage() {
         <section className="panel">
           <div className="panel-head">
             <div className="tabs" role="tablist">
-              <button role="tab" aria-selected={tab === "canvas"} className={tab === "canvas" ? "on" : ""} onClick={() => setTab("canvas")}>画布</button>
+              <button role="tab" aria-selected={tab === "canvas"} className={tab === "canvas" ? "on" : ""} onClick={() => setTab("canvas")}>{t("ws.tabCanvas")}</button>
               <button role="tab" aria-selected={tab === "profile"} className={tab === "profile" ? "on" : ""} onClick={() => setTab("profile")}>
-                工作画像<span className="mono muted" style={{ marginLeft: 4 }}>{profile.painPoints.length}</span>
+                {t("ws.tabProfile")}<span className="mono muted" style={{ marginLeft: 4 }}>{profile.painPoints.length}</span>
               </button>
             </div>
             <div className="right">
               {selected && versions.length > 0 && (
                 <Select
-                  ariaLabel="选择版本"
+                  ariaLabel={t("ws.versionAria")}
                   value={selected.version}
-                  options={versions.map((v) => ({ value: v, label: `版本 v${v}` }))}
+                  options={versions.map((v) => ({ value: v, label: t("ws.version", { v }) }))}
                   onChange={(v) => setSelected({ ...selected, version: v })}
                 />
               )}
               {workflows.length > 1 && selected && (
                 <Select
-                  ariaLabel="选择工作流"
+                  ariaLabel={t("ws.workflowAria")}
                   value={selected.workflowId}
                   options={workflows.map((w) => ({ value: w.id, label: w.name }))}
                   onChange={(id) => {
@@ -556,9 +604,9 @@ export default function WorkspacePage() {
                   }}
                 />
               )}
-              <button className="btn btn-line" disabled={!selected} onClick={() => setShareOpen(true)}>分享</button>
+              <button className="btn btn-line" disabled={!selected} onClick={() => setShareOpen(true)}>{t("ws.share")}</button>
               <div style={{ position: "relative" }} ref={exportWrapRef}>
-                <button className="btn btn-ink" disabled={!ir} onClick={() => setMenuOpen((v) => !v)}>导出 ▾</button>
+                <button className="btn btn-ink" disabled={!ir} onClick={() => setMenuOpen((v) => !v)}>{t("ws.export")}</button>
                 {menuOpen && ir && (
                   <ExportMenu
                     ir={ir}
@@ -574,7 +622,7 @@ export default function WorkspacePage() {
                   />
                 )}
               </div>
-              <button className="panel-icon-btn" onClick={() => setPanelCollapsed(true)} aria-label="收起画布">{PANEL_ICON}</button>
+              <button className="panel-icon-btn" onClick={() => setPanelCollapsed(true)} aria-label={t("ws.collapseCanvas")}>{PANEL_ICON}</button>
             </div>
           </div>
           <div className="panel-body">
@@ -588,7 +636,7 @@ export default function WorkspacePage() {
         </>
         )}
         {hasWorkflow && !showPanel && (
-          <button className="panel-edge" onClick={() => setPanelCollapsed(false)} aria-label="展开画布">{PANEL_ICON}</button>
+          <button className="panel-edge" onClick={() => setPanelCollapsed(false)} aria-label={t("ws.expandCanvas")}>{PANEL_ICON}</button>
         )}
       </div>
 

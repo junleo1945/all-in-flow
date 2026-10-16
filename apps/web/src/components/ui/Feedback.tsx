@@ -1,3 +1,4 @@
+import { tr, useI18n } from "../../i18n";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 type ToastKind = "ok" | "err" | "info";
@@ -21,7 +22,7 @@ const FeedbackContext = createContext<Feedback | null>(null);
 /** 页面内的轻提示与确认弹窗，替代 window.alert / window.confirm */
 export function useFeedback(): Feedback {
   const v = useContext(FeedbackContext);
-  if (!v) throw new Error("useFeedback 需要在 FeedbackProvider 内使用");
+  if (!v) throw new Error(tr("common.feedbackNeedsProvider"));
   return v;
 }
 
@@ -69,11 +70,12 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
 function ConfirmDialog({
   title,
   message,
-  confirmText = "确定",
-  cancelText = "取消",
+  confirmText,
+  cancelText,
   danger,
   onAnswer,
 }: ConfirmOptions & { onAnswer: (ok: boolean) => void }) {
+  const { t } = useI18n();
   const cancelRef = useRef<HTMLButtonElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const answerRef = useRef(onAnswer);
@@ -95,12 +97,12 @@ function ConfirmDialog({
         if (e.target === e.currentTarget) onAnswer(false);
       }}
     >
-      <div className="modal confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby={message ? "confirm-msg" : undefined}>
+      <div className="card modal confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby={message ? "confirm-msg" : undefined}>
         <h2 id="confirm-title">{title}</h2>
         {message && <p id="confirm-msg">{message}</p>}
         <div className="confirm-actions">
-          <button ref={cancelRef} className="btn btn-line" onClick={() => onAnswer(false)}>{cancelText}</button>
-          <button ref={confirmRef} className={`btn ${danger ? "btn-danger-solid" : "btn-ink"}`} onClick={() => onAnswer(true)}>{confirmText}</button>
+          <button ref={cancelRef} className="btn btn-line" onClick={() => onAnswer(false)}>{cancelText ?? t("common.cancel")}</button>
+          <button ref={confirmRef} className={`btn ${danger ? "btn-danger-solid" : "btn-ink"}`} onClick={() => onAnswer(true)}>{confirmText ?? t("common.confirm")}</button>
         </div>
       </div>
     </div>

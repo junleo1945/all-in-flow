@@ -21,6 +21,7 @@ import {
   ShareNotFound,
   updateShare,
 } from "../db/repos/shareRepo.js";
+import { tm, tr } from "../i18n.js";
 
 const CreateBody = z.object({
   version: z.number().int().min(1).nullable().optional(),
@@ -62,15 +63,15 @@ export function shareRoutes(deps: ShareRouteDeps) {
   // —— 作者侧（需要登录）——
   r.post("/workflows/:id/shares", authed, async (c) => {
     const parsed = CreateBody.safeParse(await c.req.json().catch(() => ({})));
-    if (!parsed.success) throw new AppError(400, "分享参数不正确");
+    if (!parsed.success) throw new AppError(400, tm(c.get("locale"), "share.badParams"));
     const body = parsed.data;
     if (body.visibility === "public" && !deps.config.sharePublicEnabled) {
-      throw new AppError(403, "管理员尚未开启公开分享");
+      throw new AppError(403, tm(c.get("locale"), "share.disabled"));
     }
     const userId = c.get("user").id;
     const wf = await getWorkflowForUser(deps.db, userId, c.req.param("id")).catch(notFound);
     const version = body.version ?? null;
-    if (version !== null && version > wf.latestVersion) throw new AppError(400, "版本不存在");
+    if (version !== null && version > wf.latestVersion) throw new AppError(400, tm(c.get("locale"), "wf.versionNotFound"));
     const row = await createShare(deps.db, {
       workflowId: wf.id,
       userId,
@@ -89,9 +90,9 @@ export function shareRoutes(deps: ShareRouteDeps) {
 
   r.patch("/shares/:id", authed, async (c) => {
     const parsed = UpdateBody.safeParse(await c.req.json().catch(() => ({})));
-    if (!parsed.success) throw new AppError(400, "参数不正确");
+    if (!parsed.success) throw new AppError(400, tm(c.get("locale"), "conv.badParams"));
     if (parsed.data.visibility === "public" && !deps.config.sharePublicEnabled) {
-      throw new AppError(403, "管理员尚未开启公开分享");
+      throw new AppError(403, tm(c.get("locale"), "share.disabled"));
     }
     await updateShare(deps.db, c.get("user").id, c.req.param("id"), parsed.data).catch(notFound);
     return ok(c, null);
@@ -109,12 +110,12 @@ export function shareRoutes(deps: ShareRouteDeps) {
     try {
       shared = await loadShared(deps.db, c.req.param("token"));
     } catch (e) {
-      if (e instanceof ShareNotFound) throw new AppError(404, "分享不存在");
-      if (e instanceof ShareGone) throw new AppError(410, "分享已失效");
+      if (e instanceof ShareNotFound) throw new AppError(404, tm(c.get("locale"), "share.notFound"));
+      if (e instanceof ShareGone) throw new AppError(410, tm(c.get("locale"), "share.gone"));
       throw e;
     }
     if (shared.share.visibility === "internal" && !user) {
-      throw new AppError(401, "请先登录后查看", 40001);
+      throw new AppError(401, tm(c.get("locale"), "share.loginRequired"), 40001);
     }
     await recordView(deps.db, shared.share.id);
     return ok(c, {
@@ -135,8 +136,8 @@ export function shareRoutes(deps: ShareRouteDeps) {
     try {
       shared = await loadShared(deps.db, c.req.param("token"));
     } catch (e) {
-      if (e instanceof ShareNotFound) throw new AppError(404, "分享不存在");
-      if (e instanceof ShareGone) throw new AppError(410, "分享已失效");
+      if (e instanceof ShareNotFound) throw new AppError(404, tm(c.get("locale"), "share.notFound"));
+      if (e instanceof ShareGone) throw new AppError(410, tm(c.get("locale"), "share.gone"));
       throw e;
     }
     const created = await forkShared(deps.db, c.get("user").id, {

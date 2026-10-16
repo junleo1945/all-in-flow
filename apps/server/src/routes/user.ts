@@ -10,6 +10,7 @@ import { SID_COOKIE, type AppVariables } from "../http/context.js";
 import { requireUser } from "../http/middleware.js";
 import type { Db } from "../db/client.js";
 import { todayUsage } from "../agent/quota.js";
+import { tm, tr } from "../i18n.js";
 
 const LoginBody = z.object({
   UserName: z.string().min(1).optional(),
@@ -37,11 +38,11 @@ export function userRoutes(opts: UserRouteOptions) {
     const parsed = LoginBody.safeParse(raw);
     const username = parsed.success ? (parsed.data.UserName ?? parsed.data.username) : undefined;
     const password = parsed.success ? (parsed.data.Password ?? parsed.data.password) : undefined;
-    if (!username || !password) throw new AppError(400, "请输入 ERP 账号和密码");
+    if (!username || !password) throw new AppError(400, tm(c.get("locale"), "auth.loginRequired"));
 
     const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "direct";
     if (!opts.loginLimiter.hit(`ip:${ip}`) || !opts.loginLimiter.hit(`user:${username.toLowerCase()}`)) {
-      throw new AppError(429, "登录尝试过于频繁，请稍后再试");
+      throw new AppError(429, tm(c.get("locale"), "auth.tooMany"));
     }
 
     try {
@@ -56,8 +57,8 @@ export function userRoutes(opts: UserRouteOptions) {
       });
       return ok(c, { UserName: user.username, DisplayName: user.displayName, is_super_admin: user.isAdmin });
     } catch (e) {
-      if (e instanceof ErpAuthError) throw new AppError(401, e.message || "用户名或密码错误");
-      if (e instanceof ErpUpstreamError) throw new AppError(502, `ERP 认证服务不可用: ${e.message}`);
+      if (e instanceof ErpAuthError) throw new AppError(401, e.message ? tr(c.get("locale"), e.message) : tm(c.get("locale"), "auth.badCredentials"));
+      if (e instanceof ErpUpstreamError) throw new AppError(502, tm(c.get("locale"), "auth.erpDown", { msg: e.message }));
       throw e;
     }
   });

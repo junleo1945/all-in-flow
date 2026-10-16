@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api";
+import { tr } from "../i18n";
 import type { Me } from "./types";
 
 /** 对话过程中服务端会推送 usage 事件，用它实时更新今日用量 */
@@ -23,6 +24,6 @@ export function useMe() {
 }
 
 export function formatTokens(n: number) {
-  if (n >= 10_000) return `${Math.round(n / 10_000)} 万`;
+  if (n >= 10_000) return tr("common.tokensWan", { n: Math.round(n / 10_000) });
   return String(n);
 }
