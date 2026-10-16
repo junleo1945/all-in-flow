@@ -121,6 +121,7 @@ a { color: inherit; }
 .rail.collapsed { padding: 14px 6px; }
 .rail.collapsed .rail-head { flex-direction: column; }
 .rail .item-row { position: relative; border-radius: 8px; }
+.rail .item-row.menu-open { z-index: 20; }
 .rail .item { padding: 9px 10px; border-radius: 8px; cursor: pointer; text-align: left; width: 100%; }
 .rail .item-row:hover .item, .rail .item:hover { background: var(--sheet); }
 .rail .item.on { background: var(--sheet); box-shadow: 0 0 0 1px var(--line); }
