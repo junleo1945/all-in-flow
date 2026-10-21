@@ -37,10 +37,10 @@ const SYSTEM = `你为一个工作流的每个步骤补写「聊天场景下给�
 - 每条一到两句话，以「在……」或动词开头，不要以「请」开头。
 - 只输出一个 JSON 对象：键是步骤 id，值是说明文字。不要解释，不要代码块。`;
 
-/** 只有需要用户去系统里操作的步骤（HTTP 请求）才会用到这段说明；计算、整理类的步骤由 AI 自己完成，不用补 */
+/** 只有需要用户去系统里操作的步骤（HTTP 请求，或没有结构化执行方式）才会用到这段说明；计算、整理类的步骤由 AI 自己完成，不用补 */
 function needsChat(n: WorkflowNode): boolean {
   if (n.type !== "step" || n.executor !== "deterministic" || n.chatInstructions) return false;
-  return n.action?.kind === "http";
+  return !n.action || n.action.kind === "http";
 }
 
 function collect(nodes: WorkflowNode[], out: WorkflowNode[] = []): WorkflowNode[] {

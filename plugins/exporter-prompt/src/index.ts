@@ -24,7 +24,8 @@ export const SHORT_LIMIT = 2000;
 
 function stepTag(n: StepNodeType): string | undefined {
   if (n.executor === "human") return CONFIRM;
-  if (n.action?.kind === "http") return USER_ACTION;
+  // 没有结构化执行方式的程序化步骤（例如旧工作流里的集成步骤）同样需要用户去系统里操作
+  if (n.executor === "deterministic" && (!n.action || n.action.kind === "http")) return USER_ACTION;
   return undefined;
 }
 
