@@ -1,33 +1,14 @@
-import { INTEGRATION_CATALOG, type IntegrationEntry } from "@aif/integrations";
-
-/** 可用操作的清单：模型只能引用这里登记过的 integration + operation */
-export function operationList(catalog: IntegrationEntry[] = INTEGRATION_CATALOG): string {
-  const lines = catalog
-    .filter((e) => e.operations.length > 0)
-    .flatMap((e) =>
-      e.operations.map((op) => {
-        const params = op.params.map((p) => `${p.name}${p.required ? "（必填）" : ""}`).join("、") || "无";
-        const output = op.output.map((o) => `${o.name}(${o.type})`).join("、") || "无";
-        return `- integration "${e.id}"（${e.name}）· operation "${op.id}"：${op.title}。参数：${params}。输出：${output}`;
-      }),
-    );
-  const none = catalog.filter((e) => e.operations.length === 0).map((e) => `${e.name}（id: ${e.id}）`);
-  if (none.length) lines.push(`没有登记操作的集成，不能用 integration action：${none.join("；")}`);
-  return lines.join("\n");
-}
-
 /**
- * 生成 Workflow IR v2 的提示词（export-v2.md 4）。
- * 内容由集成目录生成，进程内固定，因此整个系统提示词保持静态，可以命中缓存。
+ * 生成 Workflow IR v2 的提示词。
+ * 内容在进程内固定，整个系统提示词保持静态，可以命中缓存。
  */
-export function buildIrSystemPrompt(catalog: IntegrationEntry[] = INTEGRATION_CATALOG): string {
+export function buildIrSystemPrompt(): string {
   return `你是工作流编译器。根据用户给出的方案摘要，输出一个 JSON 对象，表示 Workflow IR v2。
 
 ## 输出格式
 - 只输出一个 JSON 对象，不要解释，不要使用 Markdown 代码块。
-- 顶层字段：version(固定为 2)、kind(固定为 "automation")、slug(kebab-case 英文)、name(中文)、description(做什么 + 什么时候用，例如"……。当用户需要……时使用。")、trigger({type: "manual"|"schedule"|"event", detail, cron?})、inputs(Variable[])、integrations、nodes、edges、source({painPointIds, savedMinutesPerWeek?})。
+- 顶层字段：version(固定为 2)、kind(固定为 "automation")、slug(kebab-case 英文)、name(中文)、description(做什么 + 什么时候用，例如"……。当用户需要……时使用。")、trigger({type: "manual"|"schedule"|"event", detail, cron?})、inputs(Variable[])、nodes、edges、source({painPointIds, savedMinutesPerWeek?})。
 - Variable 的字段：name（英文小写加下划线，不含空格、点和花括号）、type（string/number/boolean/object/array/file）、description、required（仅工作流输入使用）。
-- integrations 的 access 只能是 mcp / api / cli / webhook / manual。integrations[].id 如果在下面的操作清单中，必须使用清单中的 id。
 
 ## 节点
 - id：只含字母、数字、下划线，不能是 input 或 env。
@@ -40,7 +21,7 @@ export function buildIrSystemPrompt(catalog: IntegrationEntry[] = INTEGRATION_CA
 - 循环只能经过 decision 节点作为出口，没有 decision 的循环不合法。
 
 ## executor 与 action 的对应（必须一致）
-- deterministic 只能用：integration（调用下面清单中的操作）、transform（只用于字段拼接，见下）、http（仅当方案给出了明确的接口地址）、code（数据处理，见下）。
+- deterministic 只能用：transform（只用于字段拼接，见下）、http（仅当方案给出了明确的接口地址）、code（数据处理，见下）。
 - llm 只能用：llm（prompt 写清楚要生成或判断什么，prompt 里可以引用数据）。
 - human 只能用：human（message 写清楚要用户确认或提供什么；approval 为 true 表示只需要同意或拒绝）。
 - 数据整理要写成能直接执行的形式，导出时不会再有人替你补全：
@@ -48,30 +29,25 @@ export function buildIrSystemPrompt(catalog: IntegrationEntry[] = INTEGRATION_CA
   - 需要筛选、汇总、计算、格式转换、去重、排序等处理，用 code action：{"kind":"code","language":"javascript","source":"…"}，executor 为 deterministic。不要把处理方式写成一句话放进 transform。
   - code 的 source 是一段 JavaScript：用 $input.first().json 读取上一步的输出（只能读直接上游，需要更多数据就先加一个步骤把它们整理到一起），用 return [{ json: { 输出变量名: 值 } }] 返回，返回的字段名必须与该节点 outputs 中声明的变量名一致。
   - code 里不要访问文件、子进程、环境变量，不要使用 require、eval，也不要写网络请求；长度控制在 4000 字以内，更复杂的处理拆成多个步骤。
-- 调用外部系统：下面的操作清单里有对应操作就用 integration；没有，但方案写明了接口地址和方法，就用 http action，把 method、url、body 写完整，不要只写一句"调用某某接口"。方案没有给出地址时不要编造，保持 integration 或在 instructions 里说明待确认。
+- 调用外部系统：方案写明了接口地址和方法，就用 http action，把 method、url、body 写完整，不要只写一句"调用某某接口"。方案没有给出地址时不要编造，executor 写 human，让用户提供数据，或在 instructions 里说明待确认。
 
 ## 引用
 - 在 action 的字符串字段中，用 {{引用}} 嵌入数据：{{input.工作流输入名}}、{{节点id.输出变量名}}、子流程里的 {{元素名.字段}}。
 - 引用的节点必须在当前步骤之前执行，且输出变量已在该节点的 outputs 中声明。
 - 不带花括号的引用只用在 foreach.over、decision.input、condition.left 中。
-- integration action 的 params 值是字符串，需要传入数据时写成 "{{...}}"，固定值直接写。
 
 ## 事件触发（收到邮件等）
-- 方案是"收到某个系统的事件就开始"时，trigger 写成 {"type":"event","detail":"…","integration":"mail","event":"newMail"}，并在 integrations 中加入 {"id":"mail","name":"阿里企业邮箱","purpose":"收到新邮件","access":"manual"}。
+- 方案是"收到某个系统的事件就开始"时，trigger 写成 {"type":"event","detail":"…"}。
 - 事件的字段要声明为工作流输入，后续步骤用 {{input.名字}} 引用：from（发件人，原始 From 头，如"张三 <a@x.com>"）、subject（主题）、textPlain（纯文本正文）。输入的 required 写 false。
-- 其他事件仍然用 {"type":"event","detail":"…"}，不要编造 integration。
-
-## 集成操作清单
-${operationList(catalog)}
 
 ## 质量要求
-- 方案中的每一个 step 都要有 action。拿不到数据的步骤（没有对应操作），executor 写 human，action 用 human 让用户提供数据，不要编造接口。
+- 方案中的每一个 step 都要有 action。拿不到数据的步骤（方案没有给出接口地址），executor 写 human，action 用 human 让用户提供数据，不要编造接口。
 - 每个 step 的 instructions 要具体到可以执行，不写空话。
 - deterministic 步骤的 chatInstructions 要让没有技术背景的人照着就能操作，不能只是 instructions 的改写。
 - 不要编造集成、接口、字段或操作。
 
 ## 示例（结构示意，内容需按方案填写）
-{"version":2,"kind":"automation","slug":"weekly-report","name":"周报汇总","description":"汇总本周数据生成周报。当用户需要写周报时使用。","trigger":{"type":"manual","detail":"用户主动要求时"},"inputs":[{"name":"week","type":"string","description":"周次","required":true}],"integrations":[{"id":"erp","name":"ERP","purpose":"拉取订单","access":"api"}],"nodes":[{"id":"s","type":"start","title":"开始"},{"id":"n1","type":"step","title":"拉取订单","executor":"deterministic","integration":"erp","instructions":"拉取本周订单","chatInstructions":"在 ERP 的订单查询里，把下单时间设为本周一到现在，导出订单列表","action":{"kind":"integration","integration":"erp","operation":"listOrders","params":{"start":"{{input.week}}","end":"{{input.week}}"}},"outputs":[{"name":"orders","type":"array","description":"订单列表"}]},{"id":"n2","type":"decision","title":"有异常订单？","mode":"llm","question":"订单中是否有异常？","input":"n1.orders"},{"id":"n4","type":"step","title":"人工确认异常","executor":"human","instructions":"列出异常订单，请用户确认是否计入","action":{"kind":"human","message":"请确认异常订单 {{n1.orders}} 是否计入","approval":true}},{"id":"n3","type":"step","title":"生成周报","executor":"llm","instructions":"汇总订单生成周报","action":{"kind":"llm","prompt":"根据 {{n1.orders}} 生成周报"}},{"id":"e","type":"end","title":"结束"}],"edges":[{"from":"s","to":"n1"},{"from":"n1","to":"n2"},{"from":"n2","to":"n4","label":"有异常"},{"from":"n4","to":"n3"},{"from":"n2","to":"n3","label":"没有","default":true},{"from":"n3","to":"e"}],"source":{"painPointIds":["p1"]}}`;
+{"version":2,"kind":"automation","slug":"weekly-report","name":"周报汇总","description":"汇总本周数据生成周报。当用户需要写周报时使用。","trigger":{"type":"manual","detail":"用户主动要求时"},"inputs":[{"name":"week","type":"string","description":"周次","required":true}],"nodes":[{"id":"s","type":"start","title":"开始"},{"id":"n1","type":"step","title":"拉取订单","executor":"deterministic","instructions":"拉取本周订单","chatInstructions":"在 ERP 的订单查询里，把下单时间设为本周一到现在，导出订单列表","action":{"kind":"http","method":"GET","url":"https://erp.example.com/api/orders?week={{input.week}}"},"outputs":[{"name":"orders","type":"array","description":"订单列表"}]},{"id":"n2","type":"decision","title":"有异常订单？","mode":"llm","question":"订单中是否有异常？","input":"n1.orders"},{"id":"n4","type":"step","title":"人工确认异常","executor":"human","instructions":"列出异常订单，请用户确认是否计入","action":{"kind":"human","message":"请确认异常订单 {{n1.orders}} 是否计入","approval":true}},{"id":"n3","type":"step","title":"生成周报","executor":"llm","instructions":"汇总订单生成周报","action":{"kind":"llm","prompt":"根据 {{n1.orders}} 生成周报"}},{"id":"e","type":"end","title":"结束"}],"edges":[{"from":"s","to":"n1"},{"from":"n1","to":"n2"},{"from":"n2","to":"n4","label":"有异常"},{"from":"n4","to":"n3"},{"from":"n2","to":"n3","label":"没有","default":true},{"from":"n3","to":"e"}],"source":{"painPointIds":["p1"]}}`;
 }
 
 export const IR_SYSTEM_PROMPT = buildIrSystemPrompt();

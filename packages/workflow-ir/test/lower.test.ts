@@ -10,7 +10,6 @@ const base = (nodes: WorkflowIR["nodes"], edges: WorkflowIR["edges"]): WorkflowI
   description: "t",
   trigger: { type: "manual", detail: "手动" },
   inputs: [],
-  integrations: [],
   nodes,
   edges,
   source: { painPointIds: [] },
@@ -50,10 +49,7 @@ describe("lower：遍历顺序与回边", () => {
 describe("lower：引用解析", () => {
   it("区分工作流输入、节点输出、子流程元素", () => {
     const g = lower(v2Sample());
-    expect(g.root.refs.get("n1")).toEqual([
-      { raw: "input.week", kind: "input", name: "week", path: [] },
-      { raw: "input.week", kind: "input", name: "week", path: [] },
-    ]);
+    expect(g.root.refs.get("n1")).toEqual([{ raw: "input.week", kind: "input", name: "week", path: [] }]);
     expect(g.root.refs.get("n5")).toEqual([
       { raw: "n2.results", kind: "node", nodeId: "n2", name: "results", path: [] },
     ]);
@@ -111,7 +107,7 @@ describe("lower：能力收集", () => {
   it("记录工作流用到的能力，以及对应的节点", () => {
     const g = lower(v2Sample());
     expect(g.features.get("trigger:schedule")).toEqual([]);
-    expect(g.features.get("action:integration")).toEqual(["n1"]);
+    expect(g.features.get("action:http")).toEqual(["n1"]);
     expect(g.features.get("action:llm")).toEqual(expect.arrayContaining(["n5"]));
     expect(g.features.get("action:human")).toEqual(["n4"]);
     expect(g.features.get("decision:expr")).toEqual(["n3"]);

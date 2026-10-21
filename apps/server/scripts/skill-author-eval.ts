@@ -1,5 +1,5 @@
 /**
- * 真实模型验收（skill-export-v3.md 第 9 节）：用 exporter-prompt 的评测夹具跑一遍 Skill 撰写，
+ * 真实模型验收：用 exporter-prompt 的评测夹具跑一遍 Skill 撰写，
  * 把产物写到输出目录，并打印是否回退、校验结果、用量和耗时。
  * 用法：
  *   set -a; source <.env>; set +a
@@ -12,7 +12,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { migrateIr, type WorkflowIR } from "@aif/workflow-ir";
 import { promptGaps } from "@aif/plugin-exporter-prompt";
-import { skillFacts, unconfirmedPaths, validateSkill } from "@aif/plugin-exporter-skill";
+import { skillFacts, validateSkill } from "@aif/plugin-exporter-skill";
 import { createRuntime, resolveModel } from "../src/agent/models.js";
 import { createSkillAuthor } from "../src/skill/authorAgent.js";
 
@@ -42,7 +42,7 @@ for (const name of names) {
     const first = ir.nodes.find((n) => n.type === "step");
     if (first && first.type === "step") first.instructions = `${first.instructions}。${TRAP}`;
   }
-  const gaps = [...promptGaps(ir).map((g) => g.question), ...unconfirmedPaths(ir)];
+  const gaps = [...promptGaps(ir).map((g) => g.question)];
   const started = Date.now();
   const stages: string[] = [];
   let usage = { input: 0, output: 0, cacheRead: 0, costUsd: 0 };

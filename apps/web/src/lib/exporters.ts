@@ -71,7 +71,7 @@ export async function buildSkill(ir: WorkflowIR, options: SkillOptions = { targe
 
   const files = (await skillExporter.compile(graph, options)) as ExportFile[];
   const suffix = options.packaging === "claude-plugin" ? "claude-plugin" : "skill";
-  return { files, filename: `${ir.slug}.${suffix}.zip`, warnings: issues.map(issueText), requirements: skillExporter.requirements(graph) };
+  return { files, filename: `${ir.slug}.${suffix}.zip`, warnings: issues.map(issueText) };
 }
 
 /** 把文件打包成 zip */
@@ -97,7 +97,6 @@ export async function exportPrompt(ir: WorkflowIR) {
     files,
     filename: `${ir.slug}.prompt.zip`,
     warnings: issues.map(issueText),
-    requirements: promptExporter.requirements(graph),
   };
 }
 

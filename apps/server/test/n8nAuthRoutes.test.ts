@@ -26,7 +26,6 @@ const ir: WorkflowIR = {
   description: "汇总周报。当用户需要写周报时使用。",
   trigger: { type: "manual", detail: "手动" },
   inputs: [],
-  integrations: [],
   nodes: [
     { id: "s", type: "start", title: "开始" },
     { id: "n1", type: "step", title: "拉取订单", executor: "deterministic", instructions: "拉取订单" },

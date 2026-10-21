@@ -41,7 +41,6 @@ describe("旧工作流补写循环项字段说明", () => {
     description: "逐份评估简历",
     trigger: { type: "manual", detail: "用户发起" },
     inputs: [{ name: "resumes", type: "array", items: "object", description: "候选人简历列表，每项包含 name 和 text", required: true, ...(fields ? { fields } : {}) }],
-    integrations: [],
     nodes: [
       { id: "s", type: "start", title: "开始" },
       {

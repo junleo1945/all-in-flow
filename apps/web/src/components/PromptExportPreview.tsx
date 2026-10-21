@@ -62,7 +62,6 @@ export function PromptExportPreview({
         if (!live) return;
         setFiles(r.files);
         setNotes([
-          ...r.requirements.map((q) => t("exp.reqUse", { q })),
           ...r.warnings.map((w) => t("exp.warn", { w })),
         ]);
       })

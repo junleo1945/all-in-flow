@@ -62,7 +62,7 @@ export function SkillExportDialog({
       setShown({
         files: s.files,
         filename: s.filename,
-        notes: [...(reason ? [reason] : []), ...s.requirements.map((q) => t("exp.reqRun", { q })), ...s.warnings.map((w) => t("exp.warn", { w }))],
+        notes: [...(reason ? [reason] : []), ...s.warnings.map((w) => t("exp.warn", { w }))],
       });
     } catch (e) {
       setStage(null);
@@ -75,7 +75,6 @@ export function SkillExportDialog({
     filename: r.filename,
     notes: [
       ...(r.fallback ? [t("skillExport.fallback", { reason: r.fallbackReason ?? "" })] : []),
-      ...r.requirements.map((q) => t("exp.reqRun", { q })),
       ...r.issues.map((i) => t("exp.warn", { w: ex.issueText(i) })),
       ...r.warnings.map((w) => t("exp.warn", { w })),
       ...r.todo.map((x) => t("skillExport.todo", { x })),

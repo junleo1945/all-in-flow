@@ -11,17 +11,15 @@ const base = (over: Partial<WorkflowIR> = {}): WorkflowIR => ({
   description: "整理客户反馈并生成回复草稿。当用户需要处理客户反馈时使用。",
   trigger: { type: "manual", detail: "用户发起" },
   inputs: [],
-  integrations: [],
   nodes: [],
   edges: [],
   source: { painPointIds: [] },
   ...over,
 });
 
-/** 顶层：拉取订单（集成）→ 逐条处理（循环，内含判断）→ 生成草稿（大模型）→ 结束 */
+/** 顶层：拉取订单（HTTP）→ 逐条处理（循环，内含判断）→ 生成草稿（大模型）→ 结束 */
 const nested = (): WorkflowIR =>
   base({
-    integrations: [{ id: "erp", name: "ERP", purpose: "拉取订单", access: "api" }],
     nodes: [
       { id: "s", type: "start", title: "开始" },
       {
@@ -29,9 +27,8 @@ const nested = (): WorkflowIR =>
         type: "step",
         title: "拉取订单",
         executor: "deterministic",
-        integration: "erp",
         instructions: "调用 ERP 查询订单",
-        action: { kind: "integration", integration: "erp", operation: "listOrders", params: {} },
+        action: { kind: "http", method: "GET", url: "https://erp.example.com/api/orders" },
         outputs: [{ name: "items", type: "array", description: "订单列表" }],
       },
       {
@@ -81,7 +78,7 @@ describe("对话提示词导出", () => {
     expect(md).not.toContain("时使用");
   });
 
-  it("集成和 HTTP 步骤标记为需要用户操作，人工步骤标记为需要确认，大模型步骤不标", () => {
+  it("HTTP 步骤标记为需要用户操作，人工步骤标记为需要确认，大模型步骤不标", () => {
     const md = renderPrompt(nested());
     expect(md).toContain("1. **拉取订单**〔需要用户操作〕");
     expect(md).toContain("3. **确认发送**〔需要确认〕");
@@ -100,10 +97,10 @@ describe("对话提示词导出", () => {
     expect(md).toContain("3. **确认发送**〔需要确认〕 请用户确认草稿。暂停，等用户回复后再继续。至此流程结束。");
   });
 
-  it("有输入、涉及的系统和最终交付时才写对应段落", () => {
+  it("有输入和最终交付时才写对应段落", () => {
     const md = renderPrompt(nested());
     expect(md).toContain("## 开始前需要确认的事项");
-    expect(md).toContain("- 「拉取订单」：在ERP中操作，准备好订单列表");
+    expect(md).toContain("- 「拉取订单」：在相关系统中操作，准备好订单列表");
     expect(md).toContain("## 最终交付");
     expect(md).toContain("- 「逐条处理反馈」的「回复草稿」");
     expect(md).not.toContain("## 需要用户提供的输入");
@@ -149,10 +146,6 @@ describe("对话提示词导出", () => {
   it("每一种能力都有声明，导出时不会因为未声明而报错", () => {
     for (const f of Object.keys(FEATURE_LABELS)) expect(promptExporter.capabilities[f as keyof typeof FEATURE_LABELS], f).toBeDefined();
   });
-
-  it("requirements 列出需要用户去操作的系统", () => {
-    expect(promptExporter.requirements(lower(nested()))).toEqual(["ERP：对话中的 AI 无法直接访问，相关步骤需要你手动操作后把结果贴回对话。"]);
-  });
 });
 
 describe("对话提示词的质量：适配普通聊天窗口", () => {
@@ -168,7 +161,7 @@ describe("对话提示词的质量：适配普通聊天窗口", () => {
 
   it("用户操作的步骤改写成请用户去做，并说明要贴回什么，不再写给程序看的说明", () => {
     const md = renderPrompt(nested());
-    expect(md).toContain("1. **拉取订单**〔需要用户操作〕 请你在ERP中完成：调用 ERP 查询订单。请把订单列表粘贴到对话里，我再继续。");
+    expect(md).toContain("1. **拉取订单**〔需要用户操作〕 请你在相关系统中完成：调用 ERP 查询订单。请把订单列表粘贴到对话里，我再继续。");
     expect(md).not.toContain("输出：`items`");
     // 原工作流不被修改
     expect(nested().nodes[1]).toMatchObject({ instructions: "调用 ERP 查询订单" });
@@ -237,7 +230,7 @@ describe("聊天场景操作说明 chatInstructions", () => {
 
   it("没有 chatInstructions（旧工作流）时保持原有行为", () => {
     const text = renderPrompt(withChat());
-    expect(text).toContain("请你在ERP中完成：调用 ERP 查询订单");
+    expect(text).toContain("请你在相关系统中完成：调用 ERP 查询订单");
   });
 });
 
@@ -323,7 +316,7 @@ describe("面向不熟悉 AI 的用户", () => {
     expect(promptPrep(v2Sample()).inputs).toEqual(["周次"]);
     const prep = promptPrep(nested());
     expect(prep.inputs).toEqual([]);
-    expect(prep.materials).toEqual(["「拉取订单」：在ERP中操作，准备好订单列表"]);
+    expect(prep.materials).toEqual(["「拉取订单」：在相关系统中操作，准备好订单列表"]);
   });
 
   it("约定里要求收到指令后直接开始，不复述指令（完整版和精简版都有）", () => {

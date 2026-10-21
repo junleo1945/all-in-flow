@@ -18,7 +18,7 @@ export interface ExportFile {
 }
 
 /**
- * 导出插件接口（export-v2.md 6.2）。
+ * 导出插件接口。
  * 插件是纯函数：输入执行图，输出文件。打包成 zip 等工作由前端完成。
  */
 export interface ExporterPlugin<Options = unknown> {
@@ -40,8 +40,6 @@ export interface ExporterPlugin<Options = unknown> {
   /** 只写平台特有的检查，通用的能力检查由 checkExport 完成 */
   supports(graph: ExecGraph): ExportIssue[];
   compile(graph: ExecGraph, options: Options): ExportFile[] | Promise<ExportFile[]>;
-  /** 运行导出产物需要的外部条件，导出后展示给用户 */
-  requirements(graph: ExecGraph): string[];
 }
 
 /** 能力检查：不支持的能力报错，有损的能力给出警告 */

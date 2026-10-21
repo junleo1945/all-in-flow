@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { lower, validateWorkflow, type ExportFile, type WorkflowIR } from "@aif/workflow-ir";
 import { loopIr, salesIr } from "./fixtures.js";
-import { findIntegration } from "@aif/integrations";
 import { skillExporter, renderSkillMd, skillFacts, compatibilityText } from "../src/index.js";
 import { skeleton } from "../src/index.js";
 import { planScripts } from "../src/scripts.js";
@@ -22,7 +21,7 @@ const codes = (issues: { code: string }[]) => issues.map((i) => i.code);
 
 describe("测试用的工作流本身有效", () => {
   it("通过 IR 校验", () => {
-    expect(validateWorkflow(loopIr(), { resolveOperation: undefined as never }).ok).toBe(true);
+    expect(validateWorkflow(loopIr()).ok).toBe(true);
     expect(validateWorkflow(salesIr()).ok).toBe(true);
   });
 });
@@ -136,39 +135,15 @@ describe("F3：触发方式不重复", () => {
 });
 
 describe("F4：compatibility 写运行环境", () => {
-  it("按产物推导：脚本需要的解释器和 curl", () => {
+  it("按产物推导：脚本需要的解释器", () => {
     const w = loopIr();
     expect(compatibilityText(w, planScripts(w, orderSteps(w).number).plans)).toBe("需要：Node.js 20 及以上");
   });
 
-  it("API 脚本需要 bash、curl 和对外部系统的访问；MCP 与命令行工具分别列出", () => {
+  it("没有脚本时不写这一栏", () => {
     const w = salesIr();
-    w.nodes = w.nodes.map((n) =>
-      n.id === "n1" && n.type === "step"
-        ? { ...n, action: { kind: "integration" as const, integration: "erp", operation: "listOrders", params: { start: "a", end: "b" } } }
-        : n,
-    );
-    w.integrations = [
-      { id: "erp", name: "ERP", purpose: "订单", access: "api" },
-      { id: "dingtalk-doc", name: "钉钉文档", purpose: "发布", access: "mcp" },
-      { id: "github-cli", name: "GitHub CLI", purpose: "PR", access: "cli" },
-    ];
-    expect(compatibilityText(w, planScripts(w, orderSteps(w).number).plans)).toBe("需要：bash、curl、MCP 服务「钉钉文档」、gh 命令行工具、能访问 ERP");
-  });
-
-  it("没有任何环境要求时不写这一栏；人工操作的系统不算", () => {
-    const w = salesIr();
-    w.integrations = [];
     expect(compatibilityText(w)).toBeUndefined();
     expect(renderSkillMd(w)).not.toContain("compatibility:");
-    w.integrations = [{ id: "mail", name: "邮箱", purpose: "收件", access: "manual" }];
-    expect(compatibilityText(w)).toBeUndefined();
-  });
-
-  it("不超过 500 字符", () => {
-    const w = salesIr();
-    w.integrations = Array.from({ length: 80 }, (_, i) => ({ id: `sys${i}`, name: `业务系统${i}号`, purpose: "x", access: "api" as const }));
-    expect(compatibilityText(w)!.length).toBeLessThanOrEqual(500);
   });
 });
 
@@ -201,12 +176,8 @@ describe("F6：执行约定", () => {
     expect(md).toContain("缺失时，先向用户索取，不要自行猜测");
   });
 
-  it("没有输入时不写索取输入的约定；只有存在 CONNECTIONS.md 时才引用它", () => {
-    const w = salesIr();
-    expect(renderSkillMd(w)).not.toContain("先向用户索取");
-    expect(renderSkillMd(w)).toContain("按 `CONNECTIONS.md` 调用");
-    w.integrations = [];
-    expect(renderSkillMd(w)).not.toContain("CONNECTIONS.md");
+  it("没有输入时不写索取输入的约定", () => {
+    expect(renderSkillMd(salesIr())).not.toContain("先向用户索取");
   });
 });
 
@@ -239,13 +210,11 @@ describe("F7：事实清单", () => {
     expect(f.steps.find((s) => s.id === "n4")!.next).toBe("结束");
   });
 
-  it("包含骨架里的文件、集成、触发方式和缺口，且没有地址或密钥", () => {
+  it("包含骨架里的文件、触发方式和缺口，且没有地址或密钥", () => {
     const f = facts();
     expect(f.files).toEqual(expect.arrayContaining(["SKILL.md", "scripts/01-01-transform.mjs", "references/workflow.json"]));
     expect(f.gaps).toEqual(["「复核差额」的模板"]);
     expect(f.trigger).toEqual({ type: "manual", detail: "用户主动要求核对报销单时" });
-    const erp = skillFacts(salesIr(), OPTIONS).integrations[0]!;
-    expect(erp).toMatchObject({ id: "erp", registered: true, fields: expect.arrayContaining(["ERP_TOKEN"]) });
     expect(findSecrets(JSON.stringify(f))).toEqual([]);
   });
 });
@@ -334,8 +303,8 @@ describe("校验器：规范层", () => {
   it("工具函数：frontmatter 解析与引用提取", () => {
     expect(parseFrontmatter('---\nname: a\ndescription: "x: y"\nmetadata:\n  k: v\n---\n正文')).toEqual({ fields: { name: "a", description: "x: y" }, body: "正文" });
     expect(parseFrontmatter("没有")).toBeUndefined();
-    expect(referencedPaths("见 `scripts/a.sh`、[x](references/b.md#c)、`CONNECTIONS.md`。运行 scripts/d.mjs。网址 [y](https://x.test) 不算")).toEqual(
-      expect.arrayContaining(["scripts/a.sh", "references/b.md", "CONNECTIONS.md", "scripts/d.mjs"]),
+    expect(referencedPaths("见 `scripts/a.sh`、[x](references/b.md#c)、`INSTALL.md`。运行 scripts/d.mjs。网址 [y](https://x.test) 不算")).toEqual(
+      expect.arrayContaining(["scripts/a.sh", "references/b.md", "INSTALL.md", "scripts/d.mjs"]),
     );
     expect(referencedPaths("[y](https://x.test)")).toEqual([]);
   });
@@ -382,20 +351,9 @@ describe("校验器：忠实度层", () => {
     expect(codes(fixed)).not.toContain("no-script-call");
   });
 
-  it("流程图之外的 MCP 工具、命令、集成", () => {
+  it("流程图之外的 MCP 工具和命令", () => {
     expect(codes(check((md) => `${md}\n用 mcp__erp__list_orders 取数。`))).toContain("unknown-tool");
     const cmd = check((md) => `${md}\n\`\`\`bash\nnode scripts/01-02-code.mjs '{}'\nrm -rf /tmp/x\nFOO=1 gh pr list\n\`\`\`\n`);
     expect(cmd.filter((i) => i.code === "unknown-command").map((i) => i.message)).toEqual([expect.stringContaining("rm"), expect.stringContaining("gh")]);
-    // 流程图里有 GitHub CLI 时 gh 是允许的
-    const withGh = loopIr();
-    withGh.integrations = [{ id: "github-cli", name: "GitHub CLI", purpose: "PR", access: "cli" }];
-    expect(codes(validateSkill(withSkill(filesOf(withGh), (md) => `${md}\n\`\`\`bash\ngh pr list\n\`\`\`\n`), { facts: skillFacts(withGh, OPTIONS) }))).not.toContain("unknown-command");
-
-    const entry = findIntegration("dingtalk-doc")!;
-    expect(codes(check((md) => `${md}\n结果发布到${entry.name}。`))).toContain("unknown-integration");
-    // 流程图自己的文字里提到的系统不算编造
-    const mention = loopIr();
-    (mention.nodes[2] as any).instructions = `汇总核对结论，必要时贴到${entry.name}`;
-    expect(codes(validateSkill(withSkill(filesOf(mention), (md) => `${md}\n结果贴到${entry.name}。`), { facts: skillFacts(mention, OPTIONS) }))).not.toContain("unknown-integration");
   });
 });

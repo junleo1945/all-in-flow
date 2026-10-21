@@ -24,7 +24,8 @@ export const SHORT_LIMIT = 2000;
 
 function stepTag(n: StepNodeType): string | undefined {
   if (n.executor === "human") return CONFIRM;
-  if (n.integration || n.action?.kind === "integration" || n.action?.kind === "http") return USER_ACTION;
+  // 没有结构化执行方式的程序化步骤（例如旧工作流里的集成步骤）同样需要用户去系统里操作
+  if (n.executor === "deterministic" && (!n.action || n.action.kind === "http")) return USER_ACTION;
   return undefined;
 }
 
@@ -38,7 +39,6 @@ function plainDescription(text: string): string {
 interface Ctx {
   nodes: Map<string, WorkflowNode>;
   items: Set<string>;
-  systems: Map<string, string>;
   /** 工作流输入：变量名 → 中文说明，提示词里用说明而不是变量名 */
   inputs: Map<string, string>;
   /** 循环项名 → 各个循环里该项的字段说明（字段名 → 中文说明） */
@@ -76,7 +76,7 @@ function buildCtx(ir: WorkflowIR): Ctx {
     for (const f of vars.get(n.over)?.fields ?? []) if (f.description) merged.set(f.name, f.description);
     itemFields.set(n.item, merged);
   }
-  return { nodes, items, systems: new Map(ir.integrations.map((i) => [i.id, i.name])), inputs: new Map(ir.inputs.map((i) => [i.name, i.description])), itemFields };
+  return { nodes, items, inputs: new Map(ir.inputs.map((i) => [i.name, i.description])), itemFields };
 }
 
 function refLabel(ref: string, ctx: Ctx): string {
@@ -147,10 +147,8 @@ function prepareNodes(nodes: WorkflowNode[], edges: WorkflowIR["edges"], ctx: Ct
     if (n.type !== "step") return n;
 
     if (stepTag(n) === USER_ACTION) {
-      const systemId = n.integration ?? (n.action?.kind === "integration" ? n.action.integration : undefined);
-      const where = (systemId && ctx.systems.get(systemId)) || "相关系统";
-      // 有专门写给聊天场景的说明就直接用（已经写明了在哪个系统做什么），否则退回到通用说明加系统名
-      const what = n.chatInstructions ? `请你${fillRefs(n.chatInstructions, ctx).replace(/[。.]$/, "")}` : `请你在${where}中完成：${fillRefs(n.instructions, ctx)}`;
+      // 有专门写给聊天场景的说明就直接用（已经写明了在哪个系统做什么），否则退回到通用说明
+      const what = n.chatInstructions ? `请你${fillRefs(n.chatInstructions, ctx).replace(/[。.]$/, "")}` : `请你在相关系统中完成：${fillRefs(n.instructions, ctx)}`;
       return { ...n, instructions: `${what}。请把${bringText(n, ctx)}粘贴到对话里，我再继续。`, outputs: undefined };
     }
 
@@ -196,9 +194,7 @@ function materials(ir: WorkflowIR, ctx: Ctx): string[] {
       if (n.type === "foreach") visit(n.body.nodes);
       if (n.type === "step" && stepTag(n) === USER_ACTION) {
         // 有专门写给聊天场景的说明就直接用（在哪个系统做什么），否则退回到「在 X 中操作」
-        const systemId = n.integration ?? (n.action?.kind === "integration" ? n.action.integration : undefined);
-        const where = (systemId && ctx.systems.get(systemId)) || "相关系统";
-        const what = n.chatInstructions ? fillRefs(n.chatInstructions, ctx).replace(/[。.]+\s*$/, "") : `在${where}中操作`;
+        const what = n.chatInstructions ? fillRefs(n.chatInstructions, ctx).replace(/[。.]+\s*$/, "") : "在相关系统中操作";
         out.push(`「${n.title}」：${what}${n.outputs?.length ? `，准备好${bringText(n, ctx)}` : ""}`);
       }
     }
@@ -432,7 +428,6 @@ export const promptExporter: ExporterPlugin<PromptOptions> = {
     "trigger:manual": "full",
     "trigger:schedule": "degraded",
     "trigger:event": "degraded",
-    "action:integration": "degraded",
     "action:http": "degraded",
     "action:llm": "full",
     "action:transform": "full",
@@ -449,10 +444,6 @@ export const promptExporter: ExporterPlugin<PromptOptions> = {
 
   supports(_graph: ExecGraph): ExportIssue[] {
     return [];
-  },
-
-  requirements(graph: ExecGraph): string[] {
-    return graph.ir.integrations.map((i) => `${i.name}：对话中的 AI 无法直接访问，相关步骤需要你手动操作后把结果贴回对话。`);
   },
 
   compile(graph: ExecGraph): ExportFile[] {

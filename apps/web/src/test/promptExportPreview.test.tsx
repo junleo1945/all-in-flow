@@ -20,7 +20,6 @@ vi.mock("../lib/exporters", async () => {
       files: await plugin.promptExporter.compile(lower(ir), plugin.promptExporter.defaultOptions),
       filename: `${ir.slug}.prompt.zip`,
       warnings: [],
-      requirements: [],
     }),
     download: () => {},
     zipFiles: async () => new Blob(),
@@ -36,7 +35,6 @@ const IR: WorkflowIR = {
   description: "生成周报。当用户需要周报时使用。",
   trigger: { type: "manual", detail: "用户发起" },
   inputs: [],
-  integrations: [],
   nodes: [
     { id: "s", type: "start", title: "开始" },
     { id: "n1", type: "step", title: "生成周报", executor: "llm", instructions: "按模板汇总", action: { kind: "llm", prompt: "按模板生成周报" } },
@@ -181,11 +179,10 @@ describe("PromptExportPreview：复制前的准备清单", () => {
   it("有需要用户操作的步骤时，列出要准备的材料", async () => {
     const ir: WorkflowIR = {
       ...IR,
-      integrations: [{ id: "erp", name: "ERP", purpose: "拉取订单", access: "api" }],
       inputs: [{ name: "week", type: "string", description: "周次", required: true }],
       nodes: [
         { id: "s", type: "start", title: "开始" },
-        { id: "n0", type: "step", title: "拉取订单", executor: "deterministic", integration: "erp", instructions: "调用 ERP", chatInstructions: "在 ERP 的订单查询里导出本周订单", action: { kind: "integration", integration: "erp", operation: "list", params: {} }, outputs: [{ name: "orders", type: "array", description: "订单列表" }] },
+        { id: "n0", type: "step", title: "拉取订单", executor: "deterministic", instructions: "调用 ERP", chatInstructions: "在 ERP 的订单查询里导出本周订单", action: { kind: "http", method: "GET", url: "https://erp.example.com/api/orders" }, outputs: [{ name: "orders", type: "array", description: "订单列表" }] },
         { id: "e", type: "end", title: "结束" },
       ],
       edges: [

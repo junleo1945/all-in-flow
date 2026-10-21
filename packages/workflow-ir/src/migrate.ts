@@ -7,7 +7,7 @@ export interface ConvertResult {
 }
 
 /**
- * v1 → v2（export-v2.md 3.7）。
+ * v1 → v2。
  * 只做结构转换，不做校验；调用方需要先用 v1 schema 校验过输入。
  */
 export function convertV1(ir: WorkflowIRv1): ConvertResult {
@@ -29,7 +29,6 @@ export function convertV1(ir: WorkflowIRv1): ConvertResult {
           type: "step",
           title: n.title,
           executor: n.executor!,
-          ...(n.integration ? { integration: n.integration } : {}),
           instructions: n.instructions!,
           ...(n.inputs ? { inputs: n.inputs } : {}),
           outputs: (n.outputs ?? []).map((name) => ({ name, type: "string" as const, description: "" })),
@@ -50,10 +49,34 @@ export function convertV1(ir: WorkflowIRv1): ConvertResult {
 }
 
 /**
+ * 去掉已经不再支持的集成相关内容：顶层 integrations、触发器的 integration / event、
+ * 节点的 integration，以及 integration 类型的 action（步骤保留 instructions，退回文字说明）。
+ * 旧数据在读取时清理，不批量改写；输入不会被修改。
+ */
+export function stripIntegrations<T>(raw: T): T {
+  const clean = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(clean);
+    if (!value || typeof value !== "object") return value;
+    const o = { ...(value as Record<string, unknown>) };
+    if ((o.action as { kind?: unknown } | undefined)?.kind === "integration") delete o.action;
+    if (o.type === "step") delete o.integration;
+    for (const k of Object.keys(o)) if (k === "nodes" || k === "body") o[k] = clean(o[k]);
+    return o;
+  };
+  const ir = { ...(raw as Record<string, unknown>) };
+  delete ir.integrations;
+  if (ir.trigger && typeof ir.trigger === "object") {
+    const { integration: _i, event: _e, ...trigger } = ir.trigger as Record<string, unknown>;
+    ir.trigger = trigger;
+  }
+  if (Array.isArray(ir.nodes)) ir.nodes = clean(ir.nodes);
+  return ir as T;
+}
+
+/**
  * 读取时使用：把任意已知版本转换为 v2，不做校验。
- * 数据库中的历史数据在读取时转换，不批量改写（export-v2.md 3.7）。
+ * 数据库中的历史数据在读取时转换，不批量改写。
  */
 export function migrateIr(raw: WorkflowIR | WorkflowIRv1): WorkflowIR {
-  if (raw.version === 2) return raw;
-  return convertV1(raw).ir;
+  return stripIntegrations(raw.version === 2 ? raw : convertV1(raw).ir);
 }

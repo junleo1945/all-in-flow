@@ -37,10 +37,10 @@ const SYSTEM = `你为一个工作流的每个步骤补写「聊天场景下给�
 - 每条一到两句话，以「在……」或动词开头，不要以「请」开头。
 - 只输出一个 JSON 对象：键是步骤 id，值是说明文字。不要解释，不要代码块。`;
 
-/** 只有需要用户去系统里操作的步骤（集成、HTTP）才会用到这段说明；计算、整理类的步骤由 AI 自己完成，不用补 */
+/** 只有需要用户去系统里操作的步骤（HTTP 请求，或没有结构化执行方式）才会用到这段说明；计算、整理类的步骤由 AI 自己完成，不用补 */
 function needsChat(n: WorkflowNode): boolean {
   if (n.type !== "step" || n.executor !== "deterministic" || n.chatInstructions) return false;
-  return !!n.integration || n.action?.kind === "integration" || n.action?.kind === "http";
+  return !n.action || n.action.kind === "http";
 }
 
 function collect(nodes: WorkflowNode[], out: WorkflowNode[] = []): WorkflowNode[] {
@@ -64,11 +64,9 @@ export async function backfillChatInstructions(ir: WorkflowIR, ask: Ask): Promis
   const steps = missingChatSteps(ir);
   if (steps.length === 0) return { ir, filled: 0 };
 
-  const systems = new Map(ir.integrations.map((i) => [i.id, i.name]));
   const brief = steps.map((n) => {
     const s = n as Extract<WorkflowNode, { type: "step" }>;
-    const sys = s.integration ? systems.get(s.integration) ?? s.integration : "";
-    return { id: s.id, 步骤名: s.title, 系统: sys, 原说明: s.instructions };
+    return { id: s.id, 步骤名: s.title, 原说明: s.instructions };
   });
   const raw = await ask(SYSTEM, `工作流：${ir.name}\n${ir.description}\n\n需要补写的步骤：\n${JSON.stringify(brief, null, 1)}`);
   const parsed = parseJson(raw) as Record<string, unknown> | undefined;

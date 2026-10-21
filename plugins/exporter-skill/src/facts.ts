@@ -1,5 +1,4 @@
 import { conditionText, orderSteps, type Executor, type Variable, type WorkflowIR, type WorkflowNode } from "@aif/workflow-ir";
-import { findIntegration, findOperation } from "@aif/integrations";
 import type { ScriptPlan, ScriptPlanResult } from "./scripts.js";
 
 /** 一个步骤（或判断、循环、汇合）的事实，编号与 SKILL.md 中的编号一致，子流程里是 3.1、3.2…… */
@@ -39,10 +38,9 @@ export interface SkillFacts {
   trigger: { type: "manual" | "schedule" | "event"; detail: string; cron?: string };
   inputs: Array<{ name: string; type: string; required: boolean; description: string }>;
   steps: FactStep[];
-  integrations: Array<{ id: string; name: string; access: string; fields: string[]; verify?: string; registered: boolean }>;
   /** 骨架里已有的文件，相对于 Skill 根目录；正文只能引用这些和模型自己新增的 references 文件 */
   files: string[];
-  /** 导出前仍然空缺的信息（判断标准、模板、未确认的接口路径），需要写进「待确认」 */
+  /** 导出前仍然空缺的信息（判断标准、模板），需要写进「待确认」 */
   gaps: string[];
 }
 
@@ -122,39 +120,7 @@ export function buildFacts(ir: WorkflowIR, input: FactsInput): SkillFacts {
     trigger: { type: ir.trigger.type, detail: ir.trigger.detail, ...(ir.trigger.cron ? { cron: ir.trigger.cron } : {}) },
     inputs: ir.inputs.map((v) => ({ name: v.name, type: v.type, required: !!v.required, description: v.description })),
     steps,
-    integrations: ir.integrations.map((i) => {
-      const entry = findIntegration(i.id);
-      return {
-        id: i.id,
-        name: i.name,
-        access: entry?.access ?? i.access,
-        fields: entry?.fields.map((f) => f.name) ?? [],
-        ...(entry ? { verify: entry.verify } : {}),
-        registered: !!entry,
-      };
-    }),
     files: input.files,
     gaps: input.gaps ?? [],
   };
-}
-
-/**
- * 用到的接口里路径尚未确认的（集成目录里路径含占位符）。路径是使用者环境的事，不写进 IR，
- * 只能提醒使用者在 .env 里填写对应的配置项（.env.example 里已有）。
- */
-export function unconfirmedPaths(ir: WorkflowIR): string[] {
-  const out = new Set<string>();
-  const visit = (nodes: WorkflowNode[]) => {
-    for (const n of nodes) {
-      if (n.type === "foreach") visit(n.body.nodes);
-      if (n.type !== "step" || n.action?.kind !== "integration") continue;
-      const entry = findIntegration(n.action.integration);
-      const op = findOperation(n.action.integration, n.action.operation);
-      if (!entry || !op?.api?.path.includes("<")) continue;
-      const env = `${entry.id.replace(/-/g, "_").toUpperCase()}_${op.id.toUpperCase()}_PATH`;
-      out.add(`${entry.name}的「${op.title}」接口路径尚未确认，使用前要在 .env 中填写 ${env}`);
-    }
-  };
-  visit(ir.nodes);
-  return [...out];
 }

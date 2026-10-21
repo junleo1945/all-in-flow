@@ -42,7 +42,6 @@
       "title": "拉取本周订单",
       "outputs": [],
       "executor": "deterministic",
-      "integration": "erp",
       "instructions": "调用 ERP 订单接口，时间范围为本周一 00:00 到现在",
       "chatInstructions": "在 ERP 的订单查询里，把下单时间设为本周一 00:00 到现在，导出订单列表"
     },
@@ -88,14 +87,5 @@
     "detail": "每周五 17:00"
   },
   "version": 2,
-  "description": "每周汇总 ERP 订单数据并生成销售周报。当用户需要写周报或汇总本周销售数据时使用。",
-  "integrations": [
-    {
-      "id": "erp",
-      "hint": "需要环境变量 ERP_TOKEN",
-      "name": "ERP",
-      "access": "api",
-      "purpose": "拉取本周订单"
-    }
-  ]
+  "description": "每周汇总 ERP 订单数据并生成销售周报。当用户需要写周报或汇总本周销售数据时使用。"
 }

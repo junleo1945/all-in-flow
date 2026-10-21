@@ -1,14 +1,13 @@
 import type { Action, Condition, WorkflowEdge, WorkflowIR, WorkflowNode } from "./schema.js";
 
 /**
- * 导出能力（export-v2.md 6.1）。插件用 capabilities 声明自己支持哪些，
+ * 导出能力。插件用 capabilities 声明自己支持哪些，
  * 公共检查据此生成 error / warning，插件不再手写"不支持什么"。
  */
 export type Feature =
   | "trigger:manual"
   | "trigger:schedule"
   | "trigger:event"
-  | "action:integration"
   | "action:http"
   | "action:llm"
   | "action:transform"
@@ -26,7 +25,6 @@ export const FEATURE_LABELS: Record<Feature, string> = {
   "trigger:manual": "手动触发",
   "trigger:schedule": "定时触发",
   "trigger:event": "事件触发",
-  "action:integration": "集成操作",
   "action:http": "HTTP 请求",
   "action:llm": "大模型调用",
   "action:transform": "数据整理",
@@ -93,7 +91,7 @@ interface FrameCtx {
 }
 
 /**
- * 把 IR 降级为平台无关的执行图（export-v2.md 6.1）。
+ * 把 IR 降级为平台无关的执行图。
  * 输入必须已经通过 validateWorkflow，这里不再做校验，遇到无法解析的引用直接抛错。
  */
 export function lower(ir: WorkflowIR): ExecGraph {
@@ -240,8 +238,6 @@ function nodeRefs(n: WorkflowNode, ctx: LowerCtx): ResolvedRef[] {
 
 function actionTemplates(a: Action): string[] {
   switch (a.kind) {
-    case "integration":
-      return Object.values(a.params);
     case "http":
       return [a.url, ...Object.values(a.headers ?? {}), ...(a.body ? [a.body] : [])];
     case "llm":

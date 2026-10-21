@@ -21,7 +21,7 @@ import { ExportAborted, type Usage } from "../n8n/exportAgent.js";
 import { AUTHOR_SYSTEM_PROMPT, buildAuthorPrompt, buildRepairPrompt } from "./prompt.js";
 
 /**
- * 用模型撰写 Agent Skill（skill-export-v3.md 5.3、5.4）：
+ * 用模型撰写 Agent Skill：
  * 确定性骨架 → 模型写正文（固定 JSON 协议，没有工具）→ 校验器检查 → 不通过就回喂修正；
  * 模型不可用或修复失败时回退到确定性输出，导出永不阻塞。
  */
@@ -31,7 +31,7 @@ export type Stage = "analyze" | "write" | "validate";
 export interface SkillAuthorInput {
   ir: WorkflowIR;
   options: SkillOptions;
-  /** 导出前仍然空缺的信息（判断标准、模板、未确认的接口路径） */
+  /** 导出前仍然空缺的信息（判断标准、模板） */
   gaps: string[];
   /** 访谈画像里与这个工作流相关的摘录 */
   context: string;
@@ -48,7 +48,6 @@ export interface SkillAuthorResult {
   filename: string;
   /** 导出检查（checkExport）里的警告，界面按语言翻译 */
   issues: ExportIssue[];
-  requirements: string[];
   /** 校验器给出的警告 */
   warnings: string[];
   /** 留给用户确认的事项 */
@@ -71,7 +70,6 @@ export function createSkillAuthor(opts: { runtime: ModelRuntime; model: RuntimeM
     const { ir, options, gaps, signal } = input;
     const graph = lower(ir);
     const issues = checkExport(skillExporter, graph).filter((i) => i.level !== "error");
-    const requirements = skillExporter.requirements(graph);
     const filename = `${ir.slug}.${options.packaging === "claude-plugin" ? "claude-plugin" : "skill"}.zip`;
     const check = () => {
       if (signal?.aborted) throw new ExportAborted();
@@ -81,7 +79,6 @@ export function createSkillAuthor(opts: { runtime: ModelRuntime; model: RuntimeM
       files: skillExporter.compile(graph, options) as ExportFile[],
       filename,
       issues,
-      requirements,
       warnings: [],
       todo: gaps,
       fallback: true,
@@ -174,8 +171,7 @@ export function createSkillAuthor(opts: { runtime: ModelRuntime; model: RuntimeM
         files: packageFiles(irx, files, o),
         filename,
         issues,
-        requirements,
-        warnings: found.map((i) => i.message),
+          warnings: found.map((i) => i.message),
         todo,
         fallback: false,
       };

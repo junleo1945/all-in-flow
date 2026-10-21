@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { convertV1 } from "./migrate.js";
+import { convertV1, stripIntegrations } from "./migrate.js";
 import { codeProblem } from "./coverage.js";
 import {
   REF_PATTERN,
@@ -21,19 +21,9 @@ export type ValidationResult =
   | { ok: true; ir: WorkflowIR; issues: []; warnings: string[] }
   | { ok: false; issues: ValidationIssue[]; warnings: string[] };
 
-/** 集成操作的声明，由调用方提供（通常来自 @aif/integrations），workflow-ir 不直接依赖集成目录 */
-export interface OperationSpec {
-  params: { name: string; required?: boolean }[];
-}
-
-export interface ValidateOptions {
-  /** 提供后会检查 action.operation 是否存在、参数是否匹配 */
-  resolveOperation?: (integrationId: string, operationId: string) => OperationSpec | undefined;
-}
-
-/** 与 executor 对应的 action 类型（export-v2.md 3.3） */
+/** 与 executor 对应的 action 类型 */
 const ALLOWED_ACTIONS: Record<"deterministic" | "llm" | "human", string[]> = {
-  deterministic: ["integration", "http", "transform", "code"],
+  deterministic: ["http", "transform", "code"],
   llm: ["llm"],
   human: ["human"],
 };
@@ -44,7 +34,7 @@ const RESERVED_IDS = ["input", "env"];
  * 校验 IR：先过 schema（v1 或 v2），v1 转换为 v2 后再做图结构校验。
  * 所有问题一次性返回，方便 LLM 生成失败时整体修正。
  */
-export function validateWorkflow(input: unknown, options: ValidateOptions = {}): ValidationResult {
+export function validateWorkflow(input: unknown): ValidationResult {
   const version = (input as { version?: unknown } | null)?.version;
   const warnings: string[] = [];
 
@@ -61,10 +51,11 @@ export function validateWorkflow(input: unknown, options: ValidateOptions = {}):
     warnings.push(...converted.warnings);
   }
 
-  const parsed = WorkflowIRSchema.safeParse(candidate);
+  // 模型或旧数据里可能还带着集成相关的内容，先清掉再校验
+  const parsed = WorkflowIRSchema.safeParse(stripIntegrations(candidate));
   if (!parsed.success) return { ok: false, warnings, issues: zodIssues(parsed.error) };
 
-  const issues = checkWorkflow(parsed.data, options);
+  const issues = checkWorkflow(parsed.data);
   return issues.length === 0 ? { ok: true, ir: parsed.data, issues: [], warnings } : { ok: false, issues, warnings };
 }
 
@@ -87,8 +78,6 @@ interface Frame {
 
 interface Ctx {
   ir: WorkflowIR;
-  options: ValidateOptions;
-  integrationIds: Set<string>;
   inputs: Map<string, Variable>;
   issues: ValidationIssue[];
   err: (message: string, nodeId?: string) => void;
@@ -97,7 +86,7 @@ interface Ctx {
 type RefResult = { ok: true; variable?: Variable } | { ok: false; message: string };
 
 /** 检查 IR 的所有图结构、引用和 action 规则，返回问题列表 */
-export function checkWorkflow(ir: WorkflowIR, options: ValidateOptions = {}): ValidationIssue[] {
+export function checkWorkflow(ir: WorkflowIR): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const err = (message: string, nodeId?: string) => issues.push({ level: "error", nodeId, message });
 
@@ -111,18 +100,10 @@ export function checkWorkflow(ir: WorkflowIR, options: ValidateOptions = {}): Va
 
   const ctx: Ctx = {
     ir,
-    options,
-    integrationIds: new Set(ir.integrations.map((i) => i.id)),
     inputs: new Map(ir.inputs.map((v) => [v.name, v])),
     issues,
     err,
   };
-  if (ir.trigger.integration && !ctx.integrationIds.has(ir.trigger.integration)) {
-    err(`触发器引用的集成不存在：${ir.trigger.integration}`);
-  }
-  if (ir.trigger.integration && ir.trigger.type !== "event") {
-    err("只有事件触发可以指定来源集成");
-  }
   checkFrame(ctx, [{ nodes: ir.nodes, edges: ir.edges }]);
   return issues;
 }
@@ -236,9 +217,6 @@ function checkNode(
   err: (message: string, nodeId?: string) => void,
 ) {
   if (n.type === "step") {
-    if (n.integration && !ctx.integrationIds.has(n.integration)) {
-      err(`节点引用的集成不存在：${n.integration}`, n.id);
-    }
     if (n.action) checkAction(ctx, frames, n, err);
   }
 
@@ -269,26 +247,6 @@ function checkAction(
   const template = (text: string) => checkTemplate(ctx, frames, text, n.id, err);
 
   switch (action.kind) {
-    case "integration": {
-      if (!ctx.integrationIds.has(action.integration)) {
-        err(`action 引用的集成不存在：${action.integration}`, n.id);
-      } else if (n.integration && n.integration !== action.integration) {
-        err("action 的集成必须与节点的 integration 一致", n.id);
-      }
-      const spec = ctx.options.resolveOperation?.(action.integration, action.operation);
-      if (ctx.options.resolveOperation && !spec) {
-        err(`集成 ${action.integration} 没有操作 ${action.operation}`, n.id);
-      } else if (spec) {
-        for (const key of Object.keys(action.params)) {
-          if (!spec.params.some((p) => p.name === key)) err(`操作 ${action.operation} 没有参数 ${key}`, n.id);
-        }
-        for (const p of spec.params) {
-          if (p.required && !(p.name in action.params)) err(`操作 ${action.operation} 缺少必填参数 ${p.name}`, n.id);
-        }
-      }
-      for (const v of Object.values(action.params)) template(v);
-      break;
-    }
     case "http":
       template(action.url);
       for (const v of Object.values(action.headers ?? {})) template(v);
@@ -342,7 +300,7 @@ function checkCondition(
 }
 
 /**
- * 解析引用（export-v2.md 3.2）：
+ * 解析引用：
  * - input.x：必须是工作流输入；
  * - env.X：集成配置项，只检查格式；
  * - <元素名>：foreach 子流程中当前元素，取自最近的 foreach；

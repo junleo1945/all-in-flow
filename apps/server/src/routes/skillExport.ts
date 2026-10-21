@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { checkExport, lower, migrateIr } from "@aif/workflow-ir";
-import { skillExporter, unconfirmedPaths } from "@aif/plugin-exporter-skill";
+import { skillExporter } from "@aif/plugin-exporter-skill";
 import { applyPromptAnswers, promptGaps } from "@aif/plugin-exporter-prompt";
 import type { AppVariables } from "../http/context.js";
 import { AppError } from "../http/envelope.js";
@@ -26,7 +26,7 @@ const Body = z.object({
 });
 
 /**
- * 用模型撰写 Agent Skill（skill-export-v3.md）：SSE，事件 progress / result / error。
+ * 用模型撰写 Agent Skill：SSE，事件 progress / result / error。
  * 每个用户同一时间只能跑一个，按分钟限流，并计入模型配额；使用者断开连接即取消。
  * 模型不可用或写得不合格时服务端自己回退到确定性输出（result 里 fallback 为 true），导出不会因此失败。
  */
@@ -79,7 +79,7 @@ export function skillExportRoutes(deps: {
       throw e;
     }
 
-    const gaps = [...promptGaps(ir).map((g) => g.question), ...unconfirmedPaths(ir)];
+    const gaps = [...promptGaps(ir).map((g) => g.question)];
     // 访谈画像是辅助材料：会话被删除等情况下读不到，就不带
     const conversation = await getConversation(deps.db, userId, wf.conversationId).catch(() => undefined);
     const context = conversation ? buildContext(normalizeProfile(conversation.profile as never), ir) : "";

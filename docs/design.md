@@ -314,7 +314,7 @@ flowchart LR
 |---|---|
 | 分享什么 | 某个工作流。默认**锁定当前版本**（之后再改也不影响链接内容）；可以选"始终显示最新版本" |
 | 谁能看 | **公司内**（默认）：需要 ERP 登录；**任何拿到链接的人**：公开访问，需要管理员用 `SHARE_PUBLIC_ENABLED` 开启后才能选 |
-| 包含内容 | 必含：流程图、节点详情、触发方式、前置条件。可选：来源痛点摘要（默认不含）。**对话记录永远不分享** |
+| 包含内容 | 必含：流程图、节点详情、触发方式。可选：来源痛点摘要（默认不含）。**对话记录永远不分享** |
 | 有效期 | 7 天 / 30 天 / 永久 |
 | 访问者能做什么 | 查看、缩放、点击节点看详情；内置导出（PNG / SVG / Mermaid）；登录后可以"复制到我的工作台"，以这个工作流为起点新建一个会话，继续通过对话修改。插件导出需要先复制到自己的工作台 |
 | 分享者能做什么 | 查看访问次数、修改设置、随时撤销；在首页侧栏"我的分享"里统一管理 |
@@ -433,19 +433,11 @@ type WorkflowIR = {
     cron?: string;
   };
   inputs: { name: string; description: string; required: boolean }[];
-  integrations: {                      // 依赖的外部系统
-    id: string;                        // 如 "dingtalk"、"erp"、"feishu-sheet"
-    name: string;
-    purpose: string;
-    access: "mcp" | "api" | "cli" | "manual";
-    hint?: string;                     // 如推荐的 MCP 服务名、需要的环境变量
-  }[];
   nodes: {
     id: string;
     type: "start" | "step" | "decision" | "end";
     title: string;                     // 画布上显示，建议 12 个字以内
     executor?: "deterministic" | "llm" | "human";   // 仅 step 必填
-    integration?: string;              // 引用 integrations[].id
     instructions?: string;             // 具体做什么，会写进 SKILL.md
     inputs?: string[];
     outputs?: string[];
@@ -472,7 +464,6 @@ type WorkflowIR = {
 - 所有节点都能从 `start` 到达，且都能到达某个 `end`；
 - `decision` 至少有两条出边，且每条都有 `label`；
 - `step` 必须有 `executor` 和 `instructions`；
-- `integration` 引用的 id 必须存在；
 - 允许出现环（用来表示循环），但环上必须有 `decision` 节点作为出口。
 
 ### 6.4 示例（节选）
@@ -485,12 +476,9 @@ type WorkflowIR = {
   "name": "销售周报自动汇总",
   "description": "每周汇总 ERP 订单数据并生成销售周报。当用户需要写周报或汇总本周销售数据时使用。",
   "trigger": { "type": "schedule", "detail": "每周五 17:00", "cron": "0 17 * * 5" },
-  "integrations": [
-    { "id": "erp", "name": "ERP", "purpose": "拉取本周订单", "access": "api", "hint": "需要环境变量 ERP_TOKEN" }
-  ],
   "nodes": [
     { "id": "s", "type": "start", "title": "开始" },
-    { "id": "n1", "type": "step", "title": "拉取本周订单", "executor": "deterministic", "integration": "erp", "instructions": "调用 ERP 订单接口，时间范围为本周一 00:00 到现在" },
+    { "id": "n1", "type": "step", "title": "拉取本周订单", "executor": "deterministic", "instructions": "调用 ERP 订单接口，时间范围为本周一 00:00 到现在" },
     { "id": "n2", "type": "decision", "title": "有异常订单？" },
     { "id": "n3", "type": "step", "title": "人工核对异常", "executor": "human", "instructions": "列出异常订单，请用户确认是否计入" },
     { "id": "n4", "type": "step", "title": "生成周报", "executor": "llm", "instructions": "按模板汇总销售额、环比、Top 客户，并写三条结论" },
@@ -578,7 +566,7 @@ interface ExporterPlugin<Options = unknown> {
 1. 先执行 `supports()`：有 `error` 时禁用该项并说明原因；有 `warning` 时在确认框里列出；
 2. 有 `optionsSchema` 时弹出选项表单；
 3. 执行 `compile()`，按 `output` 下载文件或 zip；
-4. 下载完成后显示 `requirements()` 列出的前置条件，以及安装说明。
+4. 下载完成后显示导出警告和安装说明。
 
 ### 7.5 Agent Skill 插件（`plugins/exporter-skill`，一期）
 
@@ -586,8 +574,6 @@ interface ExporterPlugin<Options = unknown> {
 
 插件选项：
 - **目标 Agent**：通用 / Claude Code / Pi。只影响下载完成后提示的安装位置（`.agents/skills/`、`~/.claude/skills/`、`~/.pi/agent/skills/`），Skill 内容本身相同。
-
-`requirements()`：列出 `integrations` 中的外部系统和需要的环境变量。
 
 导出结构：
 
@@ -616,9 +602,6 @@ metadata:
 ## 触发方式
 每周五 17:00，或用户主动要求时。
 
-## 前置条件
-- ERP：拉取本周订单（需要环境变量 ERP_TOKEN）
-
 ## 流程图
 见 `references/workflow.mmd`。
 
@@ -643,7 +626,6 @@ metadata:
 - `executor=human` 映射为 Wait 节点加表单或审批；
 - `supports()` 列出映射不了的节点，导出时显示为 Sticky Note 占位，提醒用户手动补。
 
-> 多平台导出（n8n、Dify、Coze）需要先把 IR 升级到 v2，详细设计见 [export-v2.md](export-v2.md)。本节的节点映射以该文档第 8 节为准。
 
 ---
 
@@ -690,7 +672,7 @@ metadata:
 ### 8.3 分享弹窗与分享页
 
 - **分享弹窗**：选择版本（锁定 v3 / 始终最新）、可见范围（公司内 / 公开，公开选项未开启时置灰并说明）、有效期、是否包含痛点摘要；生成后显示链接和复制按钮，并列出这个工作流已有的分享链接（访问次数、撤销）。选择"公开"时提示："任何拿到链接的人都能看到流程中的业务细节"。
-- **分享页**：顶部是工作流名称、作者、版本、更新时间和"复制到我的工作台"按钮；主体是只读画布，右侧是节点详情和工作流说明（触发方式、前置条件、预计节省时间）；页面上提供内置导出。
+- **分享页**：顶部是工作流名称、作者、版本、更新时间和"复制到我的工作台"按钮；主体是只读画布，右侧是节点详情和工作流说明（触发方式、步骤数、预计节省时间）；页面上提供内置导出。
 - **我的分享**：首页右侧栏列出自己创建的分享，显示访问次数和状态，可以复制链接或撤销。
 
 ---
@@ -1040,11 +1022,10 @@ flowchart LR
     end
     subgraph P2["二期"]
         direction TB
-        b0["IR v2<br/>见 export-v2.md"]
+        b0["IR v2"]
         b1["n8n 导出插件"]
         b6["Dify 导出插件"]
         b2["上传证据分析<br/>聊天记录 · 周报 · 待办"]
-        b3["集成目录<br/>常见系统 → MCP / API"]
         b4["deterministic 节点生成脚本"]
         b5["公司内部工作流库"]
     end
@@ -1079,7 +1060,6 @@ flowchart LR
 | R3 | Flash 模型多轮访谈的质量（追问深度、工具调用稳定性） | 核心体验 | 用评测体系验证；不达标就把访谈模型也换成 Pro |
 | R4 | `mermaid-to-excalidraw` 对 classDef 颜色和中文换行的支持 | 画布效果 | 开发初期先做技术验证（见 7.3） |
 | R5 | Pi SDK 1.x 版本的 API 变动 | 升级成本 | 锁定版本；Pi 相关代码集中在 `apps/server/src/agent` |
-| R6 | 导出的 Skill 依赖的外部系统用户本地没有 | Skill 跑不起来 | `compatibility` 和"前置条件"中写清楚；二期做集成目录 |
 | R7 | 公开分享是否被公司允许 | 业务信息外泄 | 默认关闭（`SHARE_PUBLIC_ENABLED=false`），**需要确认是否开放** |
 
 ---
@@ -1118,7 +1098,7 @@ flowchart LR
 - **真实模型的访谈质量**：没有 DeepSeek Key，无法运行真实的评测数字。框架已就绪，`pnpm --filter @aif/server eval` 使用 `DEEPSEEK_API_KEY` 即可运行。
 - **管理员用量页面**：只有 `GET /api/admin/usage` 接口，没有前端页面。
 - **画像编辑范围**：目前只支持修改角色信息和痛点的评分，工作清单和痛点内容还不能手动改。
-- **n8n 导出插件**（二期）、**上传证据分析**（二期）、**集成目录**（二期）。
+- **n8n 导出插件**（二期）、**上传证据分析**（二期）。
 - **代码仓库输入源插件**（三期）。
 - **单实例限制**：登录限流和会话注册表都在进程内存中，多副本部署前需要换成 Redis 或数据库。
 - **n8n 等导出插件的服务端能力**：目前所有导出都在浏览器中完成。

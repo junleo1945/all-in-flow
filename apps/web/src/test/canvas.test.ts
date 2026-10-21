@@ -11,7 +11,6 @@ const ir: WorkflowIR = {
   description: "演示",
   trigger: { type: "manual", detail: "手动" },
   inputs: [],
-  integrations: [],
   nodes: [
     { id: "s", type: "start", title: "开始" },
     { id: "a", type: "step", title: "拉取数据", executor: "deterministic", instructions: "x" },

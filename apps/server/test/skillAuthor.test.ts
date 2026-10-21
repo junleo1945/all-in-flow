@@ -20,7 +20,6 @@ const ir = (): WorkflowIR => ({
   description: "整理本周工作并生成周报。当用户需要写周报时使用。",
   trigger: { type: "manual", detail: "用户要写周报时" },
   inputs: [{ name: "week", type: "string", description: "周次", required: true }],
-  integrations: [],
   nodes: [
     { id: "s", type: "start", title: "开始" },
     { id: "n1", type: "step", title: "拼出周次标题", executor: "deterministic", instructions: "拼标题", action: { kind: "transform", template: "第 {{input.week}} 周" }, outputs: [{ name: "title", type: "string", description: "标题" }] },

@@ -13,9 +13,6 @@ importers:
       '@aif/evals':
         specifier: workspace:*
         version: link:../../packages/evals
-      '@aif/integrations':
-        specifier: workspace:*
-        version: link:../../packages/integrations
       '@aif/plugin-exporter-prompt':
         specifier: workspace:*
         version: link:../../plugins/exporter-prompt
@@ -71,9 +68,6 @@ importers:
 
   apps/web:
     dependencies:
-      '@aif/integrations':
-        specifier: workspace:*
-        version: link:../../packages/integrations
       '@aif/plugin-exporter-prompt':
         specifier: workspace:*
         version: link:../../plugins/exporter-prompt
@@ -137,15 +131,6 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@24.19.1)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.33.0)(tsx@4.23.15)(yaml@2.9.0)
 
-  packages/integrations:
-    devDependencies:
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.7(@types/node@24.19.1)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.33.0)(tsx@4.23.15)(yaml@2.9.0)
-
   packages/workflow-ir:
     dependencies:
       zod:
@@ -174,9 +159,6 @@ importers:
 
   plugins/exporter-skill:
     dependencies:
-      '@aif/integrations':
-        specifier: workspace:*
-        version: link:../../packages/integrations
       '@aif/workflow-ir':
         specifier: workspace:*
         version: link:../../packages/workflow-ir

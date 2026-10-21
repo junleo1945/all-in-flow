@@ -1,12 +1,11 @@
 import type { ExportFile } from "@aif/workflow-ir";
-import { INTEGRATION_CATALOG, findIntegration } from "@aif/integrations";
 import type { SkillFacts } from "./facts.js";
 
 /**
- * Skill 校验器（skill-export-v3.md 5.4）。输入是 Skill 根目录下的全部文件（路径相对于根目录），
+ * Skill 校验器。输入是 Skill 根目录下的全部文件（路径相对于根目录），
  * 纯函数，浏览器和服务端都能运行。分两层：
  * - 规范层：agentskills.io 规范与最佳实践的硬约束，任何来源的 Skill 都要满足；
- * - 忠实度层：给出事实清单时，检查 SKILL.md 的步骤与流程图一致，没有编造的集成、工具和密钥。
+ * - 忠实度层：给出事实清单时，检查 SKILL.md 的步骤与流程图一致，没有编造的工具和密钥。
  * 每条问题的说明写给模型看，回喂后它应能据此修正。
  */
 
@@ -89,7 +88,7 @@ export function findSecrets(content: string): string[] {
 
 // ——— 引用的文件 ———
 
-const ROOT_FILES = "INSTALL\\.md|CONNECTIONS\\.md|\\.env\\.example|mcp\\.json\\.template";
+const ROOT_FILES = "INSTALL\\.md";
 
 /** 正文里引用的相对路径：反引号里的、Markdown 链接里的、行内直接写的 */
 export function referencedPaths(content: string): string[] {
@@ -279,7 +278,7 @@ function faithfulness(md: string, body: string, facts: SkillFacts, add: (level: 
         add("error", "human-wait", `第 ${step.number} 步需要用户确认，要写明「等用户回复后再继续」`, "SKILL.md");
       }
       if (step.executor === "deterministic" && !step.script && CALLS_API.test(block.text)) {
-        add("error", "no-script-call", `第 ${step.number} 步没有脚本，不能写成「调用接口」；写明向用户索取这一步需要的数据，或按 CONNECTIONS.md 里的方式调用`, "SKILL.md");
+        add("error", "no-script-call", `第 ${step.number} 步没有脚本，不能写成「调用接口」；写明向用户索取这一步需要的数据`, "SKILL.md");
       }
     }
     const seen: string[] = [];
@@ -288,27 +287,10 @@ function faithfulness(md: string, body: string, facts: SkillFacts, add: (level: 
     if (seen.some((n, i) => n !== expected[i])) add("error", "step-order", `步骤顺序必须与流程图一致：${facts.steps.map((s) => s.number).join("、")}`, "SKILL.md");
   }
 
-  // 没有登记的 MCP 工具、命令行工具、集成
-  if (/\bmcp__[\w-]+__[\w-]+/.test(md)) add("error", "unknown-tool", "提到了 MCP 工具名；Skill 里只能写流程图里出现的集成，工具名由使用者的环境决定", "SKILL.md");
-  const clis = new Set(facts.integrations.map((i) => findIntegration(i.id)?.cli?.command).filter((c): c is string => !!c));
-  const allowed = (cmd: string) => SAFE_COMMANDS.has(cmd) || clis.has(cmd) || /^(?:\.\/)?scripts\//.test(cmd);
+  // 流程图之外的 MCP 工具和命令行工具
+  if (/\bmcp__[\w-]+__[\w-]+/.test(md)) add("error", "unknown-tool", "提到了 MCP 工具名；Skill 里不要写具体的工具名，工具名由使用者的环境决定", "SKILL.md");
+  const allowed = (cmd: string) => SAFE_COMMANDS.has(cmd) || /^(?:\.\/)?scripts\//.test(cmd);
   for (const cmd of new Set(codeCommands(md))) {
     if (!allowed(cmd)) add("error", "unknown-command", `代码块里出现了流程图之外的命令 ${cmd}；只能使用解释器、基础工具和本 Skill 的脚本`, "SKILL.md");
-  }
-  const ours = new Set(facts.integrations.map((i) => i.id));
-  const corpus = [
-    facts.title,
-    facts.descriptionDraft,
-    facts.trigger.detail,
-    ...facts.inputs.map((i) => i.description),
-    ...facts.gaps,
-    ...facts.steps.flatMap((s) => [s.title, s.instructions, s.chatInstructions, s.template, s.question, ...(s.outputs ?? []).map((o) => o.description)]),
-    ...facts.integrations.map((i) => i.name),
-  ]
-    .filter((x): x is string => !!x)
-    .join("\n");
-  for (const entry of INTEGRATION_CATALOG) {
-    if (ours.has(entry.id)) continue;
-    if (md.includes(entry.name) && !corpus.includes(entry.name)) add("error", "unknown-integration", `提到了流程图里没有的集成「${entry.name}」`, "SKILL.md");
   }
 }

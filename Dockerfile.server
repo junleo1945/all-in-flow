@@ -11,7 +11,6 @@ COPY apps/server ./apps/server
 COPY apps/web/package.json ./apps/web/package.json
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @aif/workflow-ir build \
- && pnpm --filter @aif/integrations build \
  && pnpm --filter @aif/evals build \
  && pnpm --filter @aif/plugin-exporter-skill build \
  && pnpm --filter @aif/plugin-exporter-prompt build \

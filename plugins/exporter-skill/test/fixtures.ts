@@ -9,7 +9,6 @@ export const loopIr = (): WorkflowIR => ({
   description: "逐条核对报销单金额与发票是否一致。当用户需要核对报销单时使用。",
   trigger: { type: "manual", detail: "用户主动要求核对报销单时" },
   inputs: [{ name: "expense_list", type: "array", items: "object", description: "报销单列表", required: true }],
-  integrations: [],
   nodes: [
     { id: "s", type: "start", title: "开始" },
     {
@@ -83,10 +82,9 @@ export const salesIr = (): WorkflowIR =>
     description: "每周汇总 ERP 订单数据并生成销售周报。当用户需要写周报时使用。",
     trigger: { type: "schedule", detail: "每周五 17:00", cron: "0 17 * * 5" },
     inputs: [],
-    integrations: [{ id: "erp", name: "ERP", purpose: "拉取本周订单", access: "api" }],
     nodes: [
       { id: "s", type: "start", title: "开始" },
-      { id: "n1", type: "step", title: "拉取本周订单", executor: "deterministic", integration: "erp", instructions: "调用 ERP 订单接口" },
+      { id: "n1", type: "step", title: "拉取本周订单", executor: "deterministic", instructions: "调用 ERP 订单接口" },
       { id: "n2", type: "decision", title: "有异常订单？" },
       { id: "n3", type: "step", title: "人工核对异常", executor: "human", instructions: "列出异常订单，请用户确认" },
       { id: "n4", type: "step", title: "生成周报", executor: "llm", instructions: "按模板汇总" },

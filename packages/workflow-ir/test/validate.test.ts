@@ -36,14 +36,6 @@ describe("validateWorkflow", () => {
     if (!r.ok) expect(r.issues.some((i) => i.nodeId === "orphan")).toBe(true);
   });
 
-  it("rejects an unknown integration reference", () => {
-    const ir = clone();
-    ir.nodes.find((n) => n.id === "n1")!.integration = "dingtalk";
-    const r = validateWorkflow(ir);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.issues.some((i) => i.message.includes("dingtalk"))).toBe(true);
-  });
-
   it("allows a loop that passes through a decision", () => {
     const ir = clone();
     // n4 -> n2 形成循环，循环经过 decision n2

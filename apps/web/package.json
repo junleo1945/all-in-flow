@@ -11,7 +11,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@aif/integrations": "workspace:*",
     "@aif/plugin-exporter-prompt": "workspace:*",
     "@aif/plugin-exporter-skill": "workspace:*",
     "@aif/workflow-ir": "workspace:*",

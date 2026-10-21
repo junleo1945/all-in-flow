@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { lower, type ExportFile, type WorkflowIR } from "@aif/workflow-ir";
-import { skillExporter, assembleSkill, packageFiles, parseAuthorDraft, skillFacts, unconfirmedPaths, validateSkill, type AuthorDraft, type SkillFacts } from "../src/index.js";
+import { skillExporter, assembleSkill, packageFiles, parseAuthorDraft, skillFacts, validateSkill, type AuthorDraft, type SkillFacts } from "../src/index.js";
 import { loopIr, salesIr } from "./fixtures.js";
 
 const OPTIONS = { target: "generic", packaging: "zip" } as const;
@@ -152,18 +152,5 @@ describe("assembleSkill", () => {
     const plugin = packageFiles(ir, files, { packaging: "claude-plugin" }).map((f) => f.path);
     expect(plugin[0]).toBe("expense-check/.claude-plugin/plugin.json");
     expect(plugin).toContain("expense-check/skills/expense-check/evals/evals.json");
-  });
-});
-
-describe("unconfirmedPaths", () => {
-  it("列出用到的、接口路径尚未确认的操作，没有用到时为空", () => {
-    expect(unconfirmedPaths(loopIr())).toEqual([]);
-    const w: WorkflowIR = salesIr();
-    w.nodes = w.nodes.map((n) =>
-      n.id === "n1" && n.type === "step"
-        ? { ...n, action: { kind: "integration" as const, integration: "erp", operation: "listOrders", params: { start: "a", end: "b" } } }
-        : n,
-    );
-    expect(unconfirmedPaths(w)).toEqual([expect.stringContaining("ERP_LISTORDERS_PATH")]);
   });
 });
