@@ -1,5 +1,5 @@
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { actionCoverage, validateWorkflow } from "@aif/workflow-ir";
+import { actionCoverage, executability, validateWorkflow } from "@aif/workflow-ir";
 import { PERSONAS, type Persona, type EvalRun, scoreRun, type RunMetrics } from "@aif/evals";
 import type { Db } from "../db/client.js";
 import { createConversation, getConversation } from "../db/repos/conversationRepo.js";
@@ -57,6 +57,7 @@ export async function runPersona(opts: EvalOptions, persona: Persona): Promise<P
     turns: 0,
     workflowValidity: [],
     actionCoverage: [],
+    executability: [],
   };
   const taskIds = new Set<string>();
 
@@ -84,6 +85,7 @@ export async function runPersona(opts: EvalOptions, persona: Persona): Promise<P
       if (event === "workflow") {
         const { ratio } = actionCoverage(data.ir);
         if (ratio !== null) run.actionCoverage!.push(ratio);
+        run.executability!.push(executability(data.ir));
       }
       if (event === "tool" && data.name === "emit_workflow" && data.status === "end") {
         run.workflowValidity.push(!data.error);

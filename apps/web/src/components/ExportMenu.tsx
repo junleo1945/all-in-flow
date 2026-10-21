@@ -4,6 +4,8 @@ import type { Scene } from "../lib/canvas";
 import * as ex from "../lib/exporters";
 import { ExportPreview, type ExportPreviewSpec } from "./ExportPreview";
 import { PromptExportPreview } from "./PromptExportPreview";
+import { AuthorizationsDialog } from "./AuthorizationsDialog";
+import { N8nExportDialog } from "./N8nExportDialog";
 import { tr, useI18n } from "../i18n";
 
 export interface ExporterInfo { id: string; name: string; description: string; version: string }
@@ -13,11 +15,14 @@ export function ExportMenu({
   scene,
   exporters,
   workflowId,
+  version,
   onSaved,
   onClose,
 }: {
   ir: WorkflowIR;
   workflowId?: string;
+  /** 当前显示的版本；导出 n8n 时按这个版本分析 */
+  version?: number;
   onSaved?: (version: number) => void;
   scene: Scene | null;
   exporters: ExporterInfo[];
@@ -28,6 +33,8 @@ export function ExportMenu({
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<ExportPreviewSpec | null>(null);
   const [promptOpen, setPromptOpen] = useState(false);
+  const [n8nOpen, setN8nOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
   const base = ir.slug;
 
   const run = async (fn: () => Promise<void>) => {
@@ -44,11 +51,10 @@ export function ExportMenu({
 
   const hasSkill = exporters.some((e) => e.id === "skill");
   const hasPrompt = exporters.some((e) => e.id === "prompt");
-  const hasN8n = exporters.some((e) => e.id === "n8n");
 
   return (
     <>
-      <div className="card menu" role="menu" onMouseLeave={() => undefined}>
+      <div className="card menu" role="menu" style={n8nOpen || authOpen ? { display: "none" } : undefined} onMouseLeave={() => undefined}>
         <div className="grp">{t("exp.grpImages")}<span>{t("exp.builtin")}</span></div>
         <div className="quick">
           <button className="q" disabled={!scene || busy} onClick={() => run(async () => ex.download(await ex.exportPng(scene!), `${base}.png`))}>
@@ -64,7 +70,7 @@ export function ExportMenu({
             <span className="ic">EX</span><b>Excalidraw</b><span>{t("exp.exDesc")}</span>
           </button>
         </div>
-        {(hasSkill || hasPrompt || hasN8n) && (
+        {(hasSkill || hasPrompt || !!workflowId) && (
           <>
             <hr />
             <div className="grp">{t("exp.grpPlatform")}<span>{t("exp.plugin")}</span></div>
@@ -93,12 +99,8 @@ export function ExportMenu({
                 <span className="badge">{t("exp.plugin")}</span>
               </button>
             )}
-            {hasN8n && (
-              <button className="mi" disabled={busy} onClick={() => run(async () => {
-                const r = await ex.exportN8nJson(ir);
-                ex.download(r.blob, r.filename);
-                setMsg({ kind: "ok", text: t("exp.n8nDone"), extra: [...r.requirements.map((q) => t("exp.reqImport", { q })), ...r.warnings.map((w) => t("exp.warn", { w }))] });
-              })}>
+            {workflowId && (
+              <button className="mi" disabled={busy} onClick={() => setN8nOpen(true)}>
                 <div className="ic">N8</div>
                 <div><b>{t("exp.n8n")}</b><span>{t("exp.n8nDesc")}</span></div>
                 <span className="badge">{t("exp.plugin")}</span>
@@ -117,6 +119,29 @@ export function ExportMenu({
           <button className="btn-ghost" onClick={onClose}>{t("exp.close")}</button>
         </div>
       </div>
+      {n8nOpen && workflowId && (
+        <N8nExportDialog
+          workflowId={workflowId}
+          version={version}
+          slug={base}
+          onOpenAuth={() => {
+            setN8nOpen(false);
+            setAuthOpen(true);
+          }}
+          onClose={() => {
+            setN8nOpen(false);
+            onClose();
+          }}
+        />
+      )}
+      {authOpen && (
+        <AuthorizationsDialog
+          onClose={() => {
+            setAuthOpen(false);
+            onClose();
+          }}
+        />
+      )}
       {promptOpen && (
         <PromptExportPreview
           ir={ir}

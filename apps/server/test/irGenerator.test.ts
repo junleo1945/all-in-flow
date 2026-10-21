@@ -77,6 +77,10 @@ describe("IR 提示词", () => {
     for (const op of ["listOrders", "sendText", "listPullRequests"]) expect(IR_SYSTEM_PROMPT).toContain(`"${op}"`);
     expect(IR_SYSTEM_PROMPT).toMatch(/version 为 2|version\(固定为 2\)/);
     expect(IR_SYSTEM_PROMPT).toContain("没有登记操作的集成");
+    // 数据整理要写成能直接执行的形式：字段拼接用 transform，其余处理用 code
+    expect(IR_SYSTEM_PROMPT).toContain("只用于字段拼接");
+    expect(IR_SYSTEM_PROMPT).toContain('"kind":"code","language":"javascript"');
+    expect(IR_SYSTEM_PROMPT).toContain("$input.first().json");
   });
 
   it("没有操作时不会列出空的清单", () => {

@@ -22,6 +22,13 @@
       "when": 1791671384170,
       "tag": "0002_conversation_pinned",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792507149215,
+      "tag": "0003_material_firebrand",
+      "breakpoints": true
     }
   ]
 }

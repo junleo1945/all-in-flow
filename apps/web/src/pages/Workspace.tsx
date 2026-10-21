@@ -613,6 +613,7 @@ export default function WorkspacePage() {
                     scene={scene.scene}
                     exporters={exporters}
                     workflowId={selected?.workflowId}
+                    version={selected?.version}
                     onSaved={(version) => {
                       // 切到新版本：版本下拉里也要有它
                       setVersions((vs) => (vs.includes(version) ? vs : [...vs, version].sort((x, y) => x - y)));

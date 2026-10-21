@@ -20,6 +20,10 @@ export const TriggerSchema = z.object({
   type: z.enum(["manual", "schedule", "event"]),
   detail: z.string(),
   cron: z.string().optional(),
+  /** 事件触发的来源集成，例如收到新邮件（integrations 中的 id）；没有时导出为通用 Webhook */
+  integration: z.string().optional(),
+  /** 来源集成中的事件名，例如 newMail */
+  event: z.string().optional(),
 });
 
 export const IntegrationSchema = z.object({

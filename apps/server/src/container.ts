@@ -8,6 +8,7 @@ import { createLocalStorage } from "./attachments/storage.js";
 import { createVisionService } from "./attachments/vision.js";
 import { createAttachmentService } from "./attachments/service.js";
 import { createIrGenerator } from "./agent/irGenerator.js";
+import { createN8nExporter } from "./n8n/exportAgent.js";
 import { createSessionRegistry } from "./agent/registry.js";
 import { createApp } from "./app.js";
 import { skillExporter } from "@aif/plugin-exporter-skill";
@@ -33,6 +34,7 @@ export async function buildContainer(config: AppConfig, overrides: { agentModel?
   });
 
   const generateIr = createIrGenerator({ runtime, model: workflowModel });
+  const n8nExporter = createN8nExporter({ runtime, model: workflowModel });
   // 图片识别（千问，走和 DeepSeek 相同的代理）：配置了 VISION_MODEL_ID 才开启
   // 图片存储始终可用（关闭识别后，已上传的图片仍能查看）；识别只在配置了模型时启用
   const visionEnabled = !!config.visionModelId;
@@ -75,6 +77,7 @@ export async function buildContainer(config: AppConfig, overrides: { agentModel?
     visionEnabled,
     config,
     exporters: ALL_EXPORTERS,
+    n8nExporter,
   });
 
   return { app, db, sql, registry, auth };

@@ -142,3 +142,32 @@ describe("action 覆盖率", () => {
     expect(compare(summarize(m), base).actionCoverage).toBeCloseTo(0.3);
   });
 });
+
+describe("数据整理的可执行性", () => {
+  it("描述式整理占比：写成一句描述的 transform ÷ 全部 transform，跨工作流合计", () => {
+    const m = scoreRun(sales, {
+      ...perfect,
+      executability: [
+        { transformSteps: 2, descriptiveTransforms: 1, unsafeCode: 0 },
+        { transformSteps: 2, descriptiveTransforms: 0, unsafeCode: 1 },
+      ],
+    });
+    expect(m.descriptiveTransformRate).toBe(0.25);
+    expect(m.unsafeCodeSteps).toBe(1);
+  });
+
+  it("没有 transform 步骤时为 null，汇总时不计入；不安全代码数量累加", () => {
+    expect(scoreRun(sales, perfect).descriptiveTransformRate).toBeNull();
+    const a = scoreRun(sales, { ...perfect, executability: [{ transformSteps: 1, descriptiveTransforms: 1, unsafeCode: 1 }] });
+    const b = scoreRun(sales, { ...perfect, executability: [{ transformSteps: 0, descriptiveTransforms: 0, unsafeCode: 2 }] });
+    const s = summarize([a, b, scoreRun(sales, perfect)]);
+    expect(s.descriptiveTransformRate).toBe(1);
+    expect(s.unsafeCodeSteps).toBe(3);
+    expect(compare(s, summarize([scoreRun(sales, perfect)])).unsafeCodeSteps).toBe(3);
+  });
+
+  it("报告里有描述式整理一列", () => {
+    const m = [scoreRun(sales, { ...perfect, executability: [{ transformSteps: 4, descriptiveTransforms: 1, unsafeCode: 0 }] })];
+    expect(toMarkdown(m, summarize(m))).toContain("描述式整理");
+  });
+});

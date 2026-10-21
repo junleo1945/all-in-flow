@@ -16,7 +16,6 @@
   "dependencies": {
     "@aif/evals": "workspace:*",
     "@aif/integrations": "workspace:*",
-    "@aif/plugin-exporter-n8n": "workspace:*",
     "@aif/plugin-exporter-prompt": "workspace:*",
     "@aif/plugin-exporter-skill": "workspace:*",
     "@aif/workflow-ir": "workspace:*",

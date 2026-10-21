@@ -1,3 +1,5 @@
+import { parseSecretKey } from "./auth/secretBox.js";
+
 export interface AppConfig {
   databaseUrl: string;
   port: number;
@@ -32,6 +34,10 @@ export interface AppConfig {
   dailyTokenQuotaPerUser: number;
   dailyCostLimitUsd: number;
   maxTurnsPerConversation: number;
+  /** 授权信息的加密密钥（AUTH_SECRET_KEY，32 字节）；没有时授权管理与 n8n 导出关闭 */
+  authSecretKey?: Buffer;
+  /** 允许授权的地址指向内网（仅内部部署时开启） */
+  allowPrivateHosts: boolean;
 }
 
 const bool = (v: string | undefined, def: boolean) =>
@@ -68,5 +74,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     dailyTokenQuotaPerUser: num(env.DAILY_TOKEN_QUOTA_PER_USER, 2_000_000),
     dailyCostLimitUsd: num(env.DAILY_COST_LIMIT_USD, 20),
     maxTurnsPerConversation: num(env.MAX_TURNS_PER_CONVERSATION, 80),
+    authSecretKey: parseSecretKey(env.AUTH_SECRET_KEY),
+    allowPrivateHosts: bool(env.MCP_ALLOW_PRIVATE_HOSTS, false),
   };
 }

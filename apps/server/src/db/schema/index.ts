@@ -5,3 +5,4 @@ export * from "./workflows.js";
 export * from "./shares.js";
 export * from "./usage.js";
 export * from "./attachments.js";
+export * from "./authorizations.js";
