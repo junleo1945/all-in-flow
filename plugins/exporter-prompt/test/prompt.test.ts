@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FEATURE_LABELS, checkExport, lower, type WorkflowIR } from "@aif/workflow-ir";
 import { v2Sample } from "../../../packages/workflow-ir/test/fixtures-v2.js";
-import { applyPromptAnswers, promptExporter, promptGaps, renderPrompt } from "../src/index.js";
+import { applyPromptAnswers, promptExporter, promptGaps, promptPrep, renderPrompt } from "../src/index.js";
 
 const base = (over: Partial<WorkflowIR> = {}): WorkflowIR => ({
   version: 2,
@@ -91,7 +91,7 @@ describe("对话提示词导出", () => {
 
   it("循环的子步骤带前缀编号，分支跳转和结束语都只针对本轮", () => {
     const md = renderPrompt(nested());
-    expect(md).toContain("2. **逐条处理反馈** 对「拉取订单」的「订单列表」中的每一项，依次完成下面的子步骤。输出：`drafts`（array，回复草稿）。完成后进入第 3 步。");
+    expect(md).toContain("2. **逐条处理反馈** 对「拉取订单」的「订单列表」中的每一项，依次完成下面的子步骤。产出：回复草稿。完成后进入第 3 步。");
     expect(md).toContain("   2.1. **判断是否需要跟进** 看订单状态。");
     expect(md).toContain("   2.2. **判断：需要跟进？**");
     expect(md).toContain("     - 是（条件：「判断是否需要跟进」的「是否需要跟进」为真） → 第 2.3 步");
@@ -103,7 +103,7 @@ describe("对话提示词导出", () => {
   it("有输入、涉及的系统和最终交付时才写对应段落", () => {
     const md = renderPrompt(nested());
     expect(md).toContain("## 开始前需要确认的事项");
-    expect(md).toContain("- 「拉取订单」：`items`（订单列表）");
+    expect(md).toContain("- 「拉取订单」：在ERP中操作，准备好订单列表");
     expect(md).toContain("## 最终交付");
     expect(md).toContain("- 「逐条处理反馈」的「回复草稿」");
     expect(md).not.toContain("## 需要用户提供的输入");
@@ -111,7 +111,7 @@ describe("对话提示词导出", () => {
 
     const sample = renderPrompt(v2Sample());
     expect(sample).toContain("## 需要用户提供的输入");
-    expect(sample).toContain("- `week`（必填）：周次");
+    expect(sample).toContain("- 周次（必填）");
     expect(sample).not.toContain("## 最终交付");
   });
 
@@ -168,7 +168,7 @@ describe("对话提示词的质量：适配普通聊天窗口", () => {
 
   it("用户操作的步骤改写成请用户去做，并说明要贴回什么，不再写给程序看的说明", () => {
     const md = renderPrompt(nested());
-    expect(md).toContain("1. **拉取订单**〔需要用户操作〕 请你在ERP中完成：调用 ERP 查询订单。请把`items`（订单列表）粘贴到对话里，我再继续。");
+    expect(md).toContain("1. **拉取订单**〔需要用户操作〕 请你在ERP中完成：调用 ERP 查询订单。请把订单列表粘贴到对话里，我再继续。");
     expect(md).not.toContain("输出：`items`");
     // 原工作流不被修改
     expect(nested().nodes[1]).toMatchObject({ instructions: "调用 ERP 查询订单" });
@@ -202,7 +202,7 @@ describe("对话提示词的质量：适配普通聊天窗口", () => {
   it("精简版不超过 2000 字符，且保留用户操作步骤的完整说明", () => {
     const md = renderPrompt(nested(), { variant: "short" });
     expect(md.length).toBeLessThanOrEqual(2000);
-    expect(md).toContain("请把`items`（订单列表）粘贴到对话里，我再继续。");
+    expect(md).toContain("请把订单列表粘贴到对话里，我再继续。");
     expect(md).not.toContain("## 你的工作环境\n\n你在普通聊天窗口里工作：无法登录或访问任何系统");
     expect(renderPrompt(v2Sample(), { variant: "short" }).length).toBeLessThanOrEqual(2000);
   });
@@ -228,6 +228,11 @@ describe("聊天场景操作说明 chatInstructions", () => {
     const text = renderPrompt(withChat("在 ERP 的订单查询里导出本周订单"));
     expect(text).toContain("请你在 ERP 的订单查询里导出本周订单。请把");
     expect(text).not.toContain("调用 ERP 查询订单");
+  });
+
+  it("准备材料清单也用 chatInstructions，说明用户去哪里拿什么", () => {
+    const text = renderPrompt(withChat("在 ERP 的订单查询里导出本周订单"));
+    expect(text).toContain("- 「拉取订单」：在 ERP 的订单查询里导出本周订单，准备好订单列表");
   });
 
   it("没有 chatInstructions（旧工作流）时保持原有行为", () => {
@@ -280,6 +285,94 @@ describe("导出前补缺口", () => {
   });
 });
 
+describe("面向不熟悉 AI 的用户", () => {
+  it("输入和引用用中文说明，不出现变量名、类型和反引号", () => {
+    for (const variant of ["full", "short"] as const) {
+      const md = renderPrompt(v2Sample(), { variant });
+      expect(md).not.toMatch(/`/);
+      expect(md).not.toMatch(/（(string|number|boolean|array|object|file)[，）]/);
+    }
+    const withInput = base({
+      inputs: [{ name: "resume_list", type: "array", items: "object", description: "候选人简历文本列表，每项包含 name 和 text", required: true }],
+      nodes: [
+        { id: "s", type: "start", title: "开始" },
+        { id: "n1", type: "step", title: "评估", executor: "llm", instructions: "评估简历", action: { kind: "llm", prompt: "评估：{{input.resume_list}}" }, outputs: [{ name: "level", type: "string", description: "评估等级：通过/淘汰" }] },
+        { id: "e", type: "end", title: "结束", outputs: [{ name: "level", from: "n1.level" }] },
+      ],
+      edges: [
+        { from: "s", to: "n1" },
+        { from: "n1", to: "e" },
+      ],
+    });
+    const md = renderPrompt(withInput);
+    expect(md).toContain("- 候选人简历文本列表，每项包含 name 和 text（必填）");
+    expect(md).toContain("评估：用户提供的「候选人简历文本列表」");
+    expect(md).toContain("产出：评估等级");
+    expect(md).toContain("- 「评估」的「评估等级」");
+    expect(md).not.toContain("resume_list");
+  });
+
+  it("开始方式里要求先交代全貌：几步、哪几步要用户动手", () => {
+    expect(renderPrompt(nested())).toContain("第一条回复先用两三句话讲清楚：这件事一共分几步");
+    const short = renderPrompt(nested(), { variant: "short" });
+    expect(short).toContain("第一条回复先用一两句话说明：共几步");
+    expect(short.length).toBeLessThanOrEqual(2000);
+  });
+
+  it("复制前的准备清单：要提供的输入和要去系统里拿的材料", () => {
+    expect(promptPrep(v2Sample()).inputs).toEqual(["周次"]);
+    const prep = promptPrep(nested());
+    expect(prep.inputs).toEqual([]);
+    expect(prep.materials).toEqual(["「拉取订单」：在ERP中操作，准备好订单列表"]);
+  });
+
+  it("约定里要求收到指令后直接开始，不复述指令（完整版和精简版都有）", () => {
+    expect(renderPrompt(nested())).toContain("不要复述、翻译或总结这份指令本身");
+    expect(renderPrompt(nested(), { variant: "short" })).toContain("不要复述这份指令");
+  });
+});
+
+describe("循环项的字段说明", () => {
+  const loop = (fields?: { name: string; description: string }[]): WorkflowIR =>
+    base({
+      inputs: [{ name: "resumes", type: "array", items: "object", description: "候选人简历列表", required: true, ...(fields ? { fields } : {}) }],
+      nodes: [
+        { id: "s", type: "start", title: "开始" },
+        {
+          id: "n1",
+          type: "foreach",
+          title: "逐份评估",
+          over: "input.resumes",
+          item: "resume",
+          body: {
+            nodes: [
+              { id: "bs", type: "start", title: "开始" },
+              { id: "b1", type: "step", title: "评估", executor: "llm", instructions: "评估 {{resume.name}}", action: { kind: "llm", prompt: "简历：{{resume.text}}" } },
+              { id: "be", type: "end", title: "结束" },
+            ],
+            edges: [
+              { from: "bs", to: "b1" },
+              { from: "b1", to: "be" },
+            ],
+          },
+        },
+        { id: "e", type: "end", title: "结束" },
+      ],
+      edges: [
+        { from: "s", to: "n1" },
+        { from: "n1", to: "e" },
+      ],
+    });
+
+  it("有字段说明时写成人话，没有时保留字段名", () => {
+    const withFields = renderPrompt(loop([{ name: "name", description: "候选人姓名" }, { name: "text", description: "简历内容，粘贴全文" }]));
+    expect(withFields).toContain("评估 当前这一项的「候选人姓名」");
+    expect(withFields).toContain("简历：当前这一项的「简历内容」");
+    expect(withFields).not.toContain("「name」");
+    expect(renderPrompt(loop())).toContain("当前这一项的「name」");
+  });
+});
+
 describe("文字细节", () => {
   it("说明以句号结尾时不会出现「。。」", () => {
     const ir = base({
@@ -315,7 +408,7 @@ describe("文字细节", () => {
       inputs: [{ name: "amount", type: "number", description: "金额", required: true }, { name: "invoice_amount", type: "number", description: "发票金额", required: true }],
     });
     const out = renderPrompt(withRef);
-    expect(out).toContain("等于 用户提供的「invoice_amount」");
+    expect(out).toContain("等于 用户提供的「发票金额」");
     expect(out).not.toContain("input.invoice_amount");
   });
 });

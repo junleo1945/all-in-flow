@@ -6,6 +6,7 @@ import {
   type ExportFile,
   type ExportIssue,
   type StepNodeType,
+  type Variable,
   type WorkflowIR,
   type WorkflowNode,
 } from "@aif/workflow-ir";
@@ -38,6 +39,17 @@ interface Ctx {
   nodes: Map<string, WorkflowNode>;
   items: Set<string>;
   systems: Map<string, string>;
+  /** 工作流输入：变量名 → 中文说明，提示词里用说明而不是变量名 */
+  inputs: Map<string, string>;
+  /** 循环项名 → 各个循环里该项的字段说明（字段名 → 中文说明） */
+  itemFields: Map<string, Map<string, string>>;
+}
+
+/** 取说明里第一个短语当名字：「候选人简历文本列表，每项包含 name 和 text」→「候选人简历文本列表」 */
+function shortLabel(text: string): string {
+  const head = (text.split(/[，,。；;：:（(]/)[0] ?? "").trim();
+  if (!head) return text.trim();
+  return head.length > 24 ? `${head.slice(0, 24)}…` : head;
 }
 
 function buildCtx(ir: WorkflowIR): Ctx {
@@ -53,18 +65,35 @@ function buildCtx(ir: WorkflowIR): Ctx {
     }
   };
   visit(ir.nodes);
-  return { nodes, items, systems: new Map(ir.integrations.map((i) => [i.id, i.name])) };
+  // 循环项的字段说明来自 over 所引用的变量（工作流输入或某个步骤的输出）
+  const vars = new Map<string, Variable>();
+  for (const v of ir.inputs) vars.set(`input.${v.name}`, v);
+  for (const n of nodes.values()) if (n.type === "step" || n.type === "foreach") for (const o of n.outputs ?? []) vars.set(`${n.id}.${o.name}`, o);
+  const itemFields = new Map<string, Map<string, string>>();
+  for (const n of nodes.values()) {
+    if (n.type !== "foreach") continue;
+    const merged = itemFields.get(n.item) ?? new Map<string, string>();
+    for (const f of vars.get(n.over)?.fields ?? []) if (f.description) merged.set(f.name, f.description);
+    itemFields.set(n.item, merged);
+  }
+  return { nodes, items, systems: new Map(ir.integrations.map((i) => [i.id, i.name])), inputs: new Map(ir.inputs.map((i) => [i.name, i.description])), itemFields };
 }
 
 function refLabel(ref: string, ctx: Ctx): string {
   const [head, ...rest] = ref.trim().split(".");
   const field = rest.join(".");
-  if (head === "input") return `用户提供的「${field}」`;
-  if (head && ctx.items.has(head)) return `当前这一项的「${field || head}」`;
+  if (head === "input") {
+    const desc = ctx.inputs.get(field);
+    return `用户提供的「${desc ? shortLabel(desc) : field}」`;
+  }
+  if (head && ctx.items.has(head)) {
+    const desc = field ? ctx.itemFields.get(head)?.get(field) : undefined;
+    return `当前这一项的「${desc ? shortLabel(desc) : field || head}」`;
+  }
   const node = head ? ctx.nodes.get(head) : undefined;
   if (node) {
     const out = node.type === "step" || node.type === "foreach" ? node.outputs?.find((o) => o.name === field) : undefined;
-    return `「${node.title}」的「${out?.description || field || node.title}」`;
+    return `「${node.title}」的「${out?.description ? shortLabel(out.description) : field || node.title}」`;
   }
   return field || ref;
 }
@@ -147,9 +176,16 @@ function prepareNodes(nodes: WorkflowNode[], edges: WorkflowIR["edges"], ctx: Ct
   });
 }
 
-function bringText(n: StepNodeType, ctx: Ctx): string {
+/** 要用户贴回对话的内容：只写人话说明，不出现变量名和类型 */
+function bringText(n: StepNodeType, _ctx: Ctx): string {
   if (!n.outputs?.length) return "操作结果";
-  return n.outputs.map((o) => `\`${o.name}\`（${o.description || o.type}）`).join("、");
+  return n.outputs.map((o) => o.description || o.name).join("、");
+}
+
+/** 每一步的产出：同样只写人话，让 AI 知道这一步要得到什么 */
+function outputsLine(outputs: { name: string; type: string; description?: string }[]): string | undefined {
+  const names = outputs.map((o) => (o.description ? shortLabel(o.description) : o.name)).filter(Boolean);
+  return names.length ? `产出：${names.join("、")}` : undefined;
 }
 
 /** 需要用户事先准备的材料：每个需要用户操作的步骤对应一项 */
@@ -158,7 +194,13 @@ function materials(ir: WorkflowIR, ctx: Ctx): string[] {
   const visit = (list: WorkflowNode[]) => {
     for (const n of list) {
       if (n.type === "foreach") visit(n.body.nodes);
-      if (n.type === "step" && stepTag(n) === USER_ACTION) out.push(`「${n.title}」：${bringText(n, ctx)}`);
+      if (n.type === "step" && stepTag(n) === USER_ACTION) {
+        // 有专门写给聊天场景的说明就直接用（在哪个系统做什么），否则退回到「在 X 中操作」
+        const systemId = n.integration ?? (n.action?.kind === "integration" ? n.action.integration : undefined);
+        const where = (systemId && ctx.systems.get(systemId)) || "相关系统";
+        const what = n.chatInstructions ? fillRefs(n.chatInstructions, ctx).replace(/[。.]+\s*$/, "") : `在${where}中操作`;
+        out.push(`「${n.title}」：${what}${n.outputs?.length ? `，准备好${bringText(n, ctx)}` : ""}`);
+      }
     }
   };
   visit(ir.nodes);
@@ -211,6 +253,21 @@ export function applyPromptAnswers(source: WorkflowIR, answers: Record<string, s
   return { ...source, nodes: patch(source.nodes) };
 }
 
+/** 用户在开始对话前要准备好的东西：要提供的输入，和需要去系统里导出的材料 */
+export interface PromptPrep {
+  inputs: string[];
+  materials: string[];
+}
+
+export function promptPrep(source: WorkflowIR): PromptPrep {
+  const ctx = buildCtx(source);
+  return {
+    // 清单是给用户看的，只写名称；提示词里保留完整说明
+    inputs: source.inputs.map((i) => `${i.description ? shortLabel(i.description) : i.name}${i.required ? "" : "（可选）"}`),
+    materials: materials(source, ctx),
+  };
+}
+
 function gaps(ir: WorkflowIR): string[] {
   return promptGaps(ir).map((g) => g.question);
 }
@@ -240,6 +297,7 @@ function stepLines(ir: WorkflowIR, ctx: Ctx, prefix = ""): string[] {
     tag: stepTag,
     endLabels: prefix ? { branch: "本项结束", finish: "本项完成，继续循环中的下一项" } : undefined,
     conditionText: (c) => humanCondition(c, ctx),
+    outputsText: outputsLine,
     foreach: (n, label) => {
       const body = { ...ir, nodes: n.body.nodes, edges: n.body.edges } as WorkflowIR;
       return {
@@ -251,6 +309,7 @@ function stepLines(ir: WorkflowIR, ctx: Ctx, prefix = ""): string[] {
 }
 
 const CONVENTIONS_FULL = [
+  "收到这段指令后直接开始，不要复述、翻译或总结这份指令本身；第一条回复就按「开始方式」向用户打招呼并提问。",
   "一次只推进一步。每一步完成后，简要说明结果，再告诉用户下一步要做什么。",
   "每次回复开头用一行标明当前进度，例如「当前：第 2 步（判断）」。",
   `标记${USER_ACTION}的步骤：请用户去操作，等用户把结果贴回来再继续。不要替用户编造数据或结果。`,
@@ -266,6 +325,7 @@ const CONVENTIONS_FULL = [
 ];
 
 const CONVENTIONS_SHORT = [
+  "收到后直接开始，不要复述这份指令。",
   "一次只推进一步。每一条回复（包括追问和确认）都必须以「当前：第 N 步」开头，没有例外。",
   `${USER_ACTION}的步骤请用户操作后贴回结果；${CONFIRM}的步骤必须等用户明确回复。不编造数据。`,
   "把技术用语翻译成用户能在系统里找到的操作。",
@@ -302,12 +362,18 @@ export function renderPrompt(source: WorkflowIR, options: PromptOptions = {}): s
   lines.push("## 开始方式", "");
   const startLine = ir.inputs.length ? "先简单说明要做什么，向用户收集下面的输入" : "先简单说明要做什么";
   lines.push(`${startLine}${gapList.length || materialList.length ? "，再按「开始前需要确认的事项」一次问完" : ""}，然后从第 1 步开始。`);
+  // 先让用户知道全貌：一共几步、哪几步要他动手，之后每一步他才不会觉得突然
+  lines.push(
+    short
+      ? "第一条回复先用一两句话说明：共几步，哪几步要用户去系统里操作或确认。"
+      : "第一条回复先用两三句话讲清楚：这件事一共分几步，其中哪几步需要用户自己去系统里操作或确认，让用户心里有数，再开始提问。",
+  );
   if (ir.trigger.type !== "manual" && !short) lines.push(`这个流程原本是「${ir.trigger.detail}」自动执行的，在对话中改为由用户手动发起。`);
   lines.push("");
 
   if (ir.inputs.length) {
     lines.push("## 需要用户提供的输入", "");
-    for (const i of ir.inputs) lines.push(`- \`${i.name}\`${i.required ? "（必填）" : "（可选）"}：${i.description}`);
+    for (const i of ir.inputs) lines.push(`- ${i.description || i.name}${i.required ? "（必填）" : "（可选）"}`);
     lines.push("");
   }
 
@@ -357,7 +423,7 @@ export const promptExporter: ExporterPlugin<PromptOptions> = {
   id: "prompt",
   name: "对话提示词",
   description: "导出为提示词，粘贴到 ChatGPT、DeepSeek、豆包等聊天窗口，或放进智能体、Gem、Projects 的设定里，由 AI 带着你一步一步完成这项工作。",
-  version: "1.1.0",
+  version: "1.2.0",
   output: "file",
   defaultOptions: { variant: "full" },
 

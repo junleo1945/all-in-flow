@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { copyText } from "../lib/clipboard";
 import { buildFileTree, type TreeNode } from "../lib/fileTree";
+import { PromptDoc } from "./PromptDoc";
 import { useI18n } from "../i18n";
 
 export interface PreviewFile {
@@ -16,6 +17,14 @@ export interface ExportPreviewSpec {
   notes: string[];
   downloadLabel: string;
   onDownload: () => Promise<void> | void;
+  /** 复制是主要操作（例如粘贴到聊天窗口的提示词）：复制放在底部作为主按钮，下载降为次要按钮 */
+  copyPrimary?: boolean;
+  /** 不显示文件名（只有一个文件、文件名对用户没有意义时） */
+  hidePath?: boolean;
+  /** 调起系统的分享面板（手机上可以直接发给其他应用或设备）；不支持时不传，按钮不显示 */
+  onShare?: () => Promise<void> | void;
+  /** 文件是提示词文档：默认排成易读的文档，可以切换查看原文；复制和下载仍然是原文 */
+  renderDoc?: boolean;
 }
 
 /**
@@ -28,11 +37,12 @@ export function ExportPreview({ spec, onClose, top }: { spec: ExportPreviewSpec;
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [raw, setRaw] = useState(false);
   const file = spec.files.find((f) => f.path === active) ?? spec.files[0];
   const text = file && typeof file.content === "string" ? file.content : null;
   const tree = useMemo(() => buildFileTree(spec.files.map((f) => f.path)), [spec.files]);
 
-  useEffect(() => setCopied(false), [active]);
+  useEffect(() => setCopied(false), [active, text]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -64,6 +74,22 @@ export function ExportPreview({ spec, onClose, top }: { spec: ExportPreviewSpec;
     }
   };
 
+  const share = async () => {
+    setErr("");
+    try {
+      await spec.onShare?.();
+    } catch (e) {
+      // 用户关闭分享面板时浏览器会抛 AbortError，不算失败
+      if ((e as Error).name !== "AbortError") setErr((e as Error).message || t("exp.shareFail"));
+    }
+  };
+
+  const copyButton = (cls: string) => (
+    <button className={`btn ${cls}`} disabled={text === null} onClick={copy}>
+      {copied ? t("exp.copied") : t("exp.copy")}
+    </button>
+  );
+
   return createPortal(
     <div className="modal-back export-preview-back" onClick={onClose}>
       <div className="card modal export-preview" role="dialog" aria-label={spec.title} onClick={(e) => e.stopPropagation()}>
@@ -84,18 +110,39 @@ export function ExportPreview({ spec, onClose, top }: { spec: ExportPreviewSpec;
             </nav>
           )}
           <section className="ep-pane">
-            <div className="ep-bar">
-              <span className="mono ep-path" title={file?.path}>{file?.path}</span>
-              <button className="btn btn-line" disabled={text === null} onClick={copy}>
-                {copied ? t("exp.copied") : t("exp.copy")}
-              </button>
-            </div>
-            {text === null ? <p className="muted ep-empty">{t("exp.binary")}</p> : <pre className="ep-code">{text}</pre>}
+            {(!(spec.copyPrimary && spec.hidePath) || spec.renderDoc) && (
+              <div className="ep-bar">
+                {spec.hidePath ? <span /> : <span className="mono ep-path" title={file?.path}>{file?.path}</span>}
+                <span className="ep-bar-btns">
+                  {spec.renderDoc && text !== null && (
+                    <button className="btn btn-line" onClick={() => setRaw((v) => !v)}>{raw ? t("exp.viewDoc") : t("exp.viewRaw")}</button>
+                  )}
+                  {!spec.copyPrimary && copyButton("btn-line")}
+                </span>
+              </div>
+            )}
+            {text === null ? (
+              <p className="muted ep-empty">{t("exp.binary")}</p>
+            ) : spec.renderDoc && !raw ? (
+              <div className="ep-doc"><PromptDoc text={text} /></div>
+            ) : (
+              <pre className="ep-code">{text}</pre>
+            )}
           </section>
         </div>
         <div className="ep-foot">
           {err ? <span className="notice-error">{err}</span> : <span />}
-          <button className="btn btn-ink" disabled={busy} onClick={download}>{spec.downloadLabel}</button>
+          <span className="ep-actions">
+            {spec.copyPrimary ? (
+              <>
+                {spec.onShare && <button className="btn btn-line" disabled={text === null} onClick={share}>{t("exp.share")}</button>}
+                <button className="btn btn-line" disabled={busy} onClick={download}>{spec.downloadLabel}</button>
+                {copyButton("btn-ink")}
+              </>
+            ) : (
+              <button className="btn btn-ink" disabled={busy} onClick={download}>{spec.downloadLabel}</button>
+            )}
+          </span>
         </div>
       </div>
     </div>,
