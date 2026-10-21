@@ -307,6 +307,8 @@ export interface RenderStepsOptions {
   endLabels?: { branch: string; finish: string };
   /** 分支条件的写法，默认 conditionText（会原样显示引用名） */
   conditionText?: (c: Condition) => string;
+  /** 步骤输出说明的写法，默认带变量名和类型（给 Skill 用）；聊天场景可改成只写人话 */
+  outputsText?: (outputs: { name: string; type: string; description?: string }[]) => string | undefined;
 }
 
 /**
@@ -316,6 +318,7 @@ export interface RenderStepsOptions {
 export function renderSteps(ir: WorkflowIR, options: RenderStepsOptions = {}): string[] {
   const { prefix = "", scripts = new Map<string, { path: string; args: string[] }>(), tag = () => undefined, foreach, endLabels } = options;
   const condText = options.conditionText ?? conditionText;
+  const outText = options.outputsText ?? outputsText;
   const { order, number, byId, out } = orderSteps(ir);
   const fmt: NumberFormat = (k) => `${prefix}${k}`;
   const labels: StepLabels = { fmt, endBranch: endLabels?.branch ?? "结束", finish: endLabels?.finish ?? "至此流程结束" };
@@ -344,7 +347,7 @@ export function renderSteps(ir: WorkflowIR, options: RenderStepsOptions = {}): s
     if (n.type === "foreach") {
       const custom = foreach?.(n, label);
       const loop = custom?.text ?? `对 \`${n.over}\` 中的每一项依次执行子流程（子流程的步骤见 references/workflow.json）`;
-      lines.push(joinStep(`${label}. **${n.title}**`, [loop, outputsText(n.outputs), parallel, loopMark, endMark, next]));
+      lines.push(joinStep(`${label}. **${n.title}**`, [loop, n.outputs?.length ? outText(n.outputs) : undefined, parallel, loopMark, endMark, next]));
       lines.push(...(custom?.lines ?? []));
       continue;
     }
@@ -358,7 +361,7 @@ export function renderSteps(ir: WorkflowIR, options: RenderStepsOptions = {}): s
     const plan = scripts.get(n.id);
     const run = plan ? `运行 \`${plan.path}\`${plan.args.length ? `，参数依次为：${plan.args.map((a) => `\`${a}\``).join("、")}` : ""}` : undefined;
     const human = n.executor === "human" ? "暂停，等用户回复后再继续" : undefined;
-    lines.push(joinStep(`${label}. **${n.title}**${tag(n) ?? ""}`, [n.instructions, run, outputsText(n.outputs), parallel, loopMark, endMark, human, next]));
+    lines.push(joinStep(`${label}. **${n.title}**${tag(n) ?? ""}`, [n.instructions, run, n.outputs?.length ? outText(n.outputs) : undefined, parallel, loopMark, endMark, human, next]));
   }
   return lines;
 }

@@ -43,12 +43,19 @@ export const WorkflowSourceSchema = z.object({
 
 export const VariableTypeSchema = z.enum(["string", "number", "boolean", "object", "array", "file"]);
 
+/** 数组每一项（或对象）里的字段及其中文说明，聊天场景的提示词用它把「item.name」写成人话 */
+export const VariableFieldSchema = z.object({
+  name: z.string().min(1),
+  description: z.string(),
+});
+
 export const VariableSchema = z.object({
   name: NameSchema,
   type: VariableTypeSchema,
   items: VariableTypeSchema.optional(),
   description: z.string(),
   required: z.boolean().optional(),
+  fields: z.array(VariableFieldSchema).optional(),
 });
 
 const FormFieldSchema = z.object({
@@ -296,6 +303,7 @@ export const WorkflowIRv1Schema = z.object({
 
 export type Executor = z.infer<typeof ExecutorSchema>;
 export type Variable = z.infer<typeof VariableSchema>;
+export type VariableField = z.infer<typeof VariableFieldSchema>;
 export type VariableType = z.infer<typeof VariableTypeSchema>;
 export type WorkflowIR = z.infer<typeof WorkflowIRSchema>;
 export type WorkflowIRv1 = z.infer<typeof WorkflowIRv1Schema>;
