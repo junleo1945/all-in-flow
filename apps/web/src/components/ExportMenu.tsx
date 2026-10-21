@@ -73,7 +73,7 @@ export function ExportMenu({
         {(hasSkill || hasPrompt || !!workflowId) && (
           <>
             <hr />
-            <div className="grp">{t("exp.grpPlatform")}<span>{t("exp.plugin")}</span></div>
+            <div className="grp">{t("exp.grpPlatform")}</div>
             {hasSkill && (
               <>
                 <button className="mi" disabled={busy} onClick={() => run(async () => {
@@ -88,7 +88,6 @@ export function ExportMenu({
                 })}>
                   <div className="ic">SK</div>
                   <div><b>Agent Skill</b><span>{t("exp.skillDesc")}</span></div>
-                  <span className="badge">{t("exp.plugin")}</span>
                 </button>
               </>
             )}
@@ -96,14 +95,12 @@ export function ExportMenu({
               <button className="mi" disabled={busy} onClick={() => setPromptOpen(true)}>
                 <div className="ic">PT</div>
                 <div><b>{t("exp.prompt")}</b><span>{t("exp.promptDesc")}</span></div>
-                <span className="badge">{t("exp.plugin")}</span>
               </button>
             )}
             {workflowId && (
               <button className="mi" disabled={busy} onClick={() => setN8nOpen(true)}>
                 <div className="ic">N8</div>
                 <div><b>{t("exp.n8n")}</b><span>{t("exp.n8nDesc")}</span></div>
-                <span className="badge">{t("exp.plugin")}</span>
               </button>
             )}
           </>
