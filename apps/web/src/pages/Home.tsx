@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { Topbar } from "../components/Topbar";
 import { formatTokens, useMe } from "../lib/useMe";
@@ -141,11 +141,6 @@ export default function HomePage() {
                 </li>
               ))}
             </ul>
-          </div>
-          <div className="card side-card">
-            <h3>{t("home.integrations")}</h3>
-            <div className="muted" style={{ marginBottom: 10 }}>{t("home.integrationsDesc")}</div>
-            <Link to="/integrations" className="btn btn-line" style={{ width: "100%" }}>{t("home.openIntegrations")}</Link>
           </div>
           <div className="card side-card">
             <h3>{t("home.myShares")}</h3>

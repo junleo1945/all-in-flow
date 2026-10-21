@@ -268,7 +268,7 @@ function joinStep(head: string, parts: (string | undefined)[]): string {
   return body ? `${head} ${body}` : head;
 }
 
-/** 把条件表达式翻译成可读的中文（export-v2.md 7.2） */
+/** 把条件表达式翻译成可读的中文 */
 export function conditionText(c: Condition): string {
   if ("all" in c) return c.all.map(conditionText).join(" 且 ");
   if ("any" in c) return c.any.map(conditionText).join(" 或 ");

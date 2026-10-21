@@ -23,7 +23,7 @@ export const SHORT_LIMIT = 2000;
 
 function stepTag(n: StepNodeType): string | undefined {
   if (n.executor === "human") return CONFIRM;
-  if (n.integration || n.action?.kind === "integration" || n.action?.kind === "http") return USER_ACTION;
+  if (n.action?.kind === "http") return USER_ACTION;
   return undefined;
 }
 
@@ -37,7 +37,6 @@ function plainDescription(text: string): string {
 interface Ctx {
   nodes: Map<string, WorkflowNode>;
   items: Set<string>;
-  systems: Map<string, string>;
 }
 
 function buildCtx(ir: WorkflowIR): Ctx {
@@ -53,7 +52,7 @@ function buildCtx(ir: WorkflowIR): Ctx {
     }
   };
   visit(ir.nodes);
-  return { nodes, items, systems: new Map(ir.integrations.map((i) => [i.id, i.name])) };
+  return { nodes, items };
 }
 
 function refLabel(ref: string, ctx: Ctx): string {
@@ -118,10 +117,8 @@ function prepareNodes(nodes: WorkflowNode[], edges: WorkflowIR["edges"], ctx: Ct
     if (n.type !== "step") return n;
 
     if (stepTag(n) === USER_ACTION) {
-      const systemId = n.integration ?? (n.action?.kind === "integration" ? n.action.integration : undefined);
-      const where = (systemId && ctx.systems.get(systemId)) || "相关系统";
-      // 有专门写给聊天场景的说明就直接用（已经写明了在哪个系统做什么），否则退回到通用说明加系统名
-      const what = n.chatInstructions ? `请你${fillRefs(n.chatInstructions, ctx).replace(/[。.]$/, "")}` : `请你在${where}中完成：${fillRefs(n.instructions, ctx)}`;
+      // 有专门写给聊天场景的说明就直接用（已经写明了在哪个系统做什么），否则退回到通用说明
+      const what = n.chatInstructions ? `请你${fillRefs(n.chatInstructions, ctx).replace(/[。.]$/, "")}` : `请你在相关系统中完成：${fillRefs(n.instructions, ctx)}`;
       return { ...n, instructions: `${what}。请把${bringText(n, ctx)}粘贴到对话里，我再继续。`, outputs: undefined };
     }
 
@@ -366,7 +363,6 @@ export const promptExporter: ExporterPlugin<PromptOptions> = {
     "trigger:manual": "full",
     "trigger:schedule": "degraded",
     "trigger:event": "degraded",
-    "action:integration": "degraded",
     "action:http": "degraded",
     "action:llm": "full",
     "action:transform": "full",
@@ -383,10 +379,6 @@ export const promptExporter: ExporterPlugin<PromptOptions> = {
 
   supports(_graph: ExecGraph): ExportIssue[] {
     return [];
-  },
-
-  requirements(graph: ExecGraph): string[] {
-    return graph.ir.integrations.map((i) => `${i.name}：对话中的 AI 无法直接访问，相关步骤需要你手动操作后把结果贴回对话。`);
   },
 
   compile(graph: ExecGraph): ExportFile[] {

@@ -49,7 +49,7 @@
 
 - **表** `authorizations`：id、user_id、kind（`n8n_mcp`）、name、url、secret（密文）、created_at。密文用 AES-256-GCM，密钥来自新环境变量 `AUTH_SECRET_KEY`（32 字节），缺失时授权功能关闭并在启动日志提示。token 不写日志、不在任何响应里出现。
 - **接口** `/api/authorizations`：list / create（含探测）/ rename / delete。
-- **出站安全**：用户填的地址服务端会去连，复用 `integrations/mcpTest.ts` 里已有的 DNS 解析加内网地址拦截，套在 `n8n/mcp.ts` 客户端上；不跟随跳转、限制响应大小和超时（已有）。内部部署要连内网 n8n 时用 `MCP_ALLOW_PRIVATE_HOSTS=true` 显式放开。
+- **出站安全**：用户填的地址服务端会去连，复用 `lib/netguard.ts` 里的内网地址拦截（`isPrivateAddress`）加 DNS 解析，套在 `n8n/mcp.ts` 客户端上；不跟随跳转、限制响应大小和超时（已有）。内部部署要连内网 n8n 时用 `MCP_ALLOW_PRIVATE_HOSTS=true` 显式放开。
 - **导出接口** `POST /api/workflows/:id/n8n-export`（SSE）：参数是版本号和授权 id；走每用户的模型配额（`assertBudget`）和已有的 `FixedWindowLimiter` 限流（例如每分钟 3 次）。
 - MCP 客户端 `n8n/mcp.ts` 保留，白名单改为上面那组只读工具。
 
@@ -59,7 +59,7 @@
 
 - 前端：`pages/N8nExport.tsx` 与路由、`N8nWizard`、`N8nNodeEntry`、`N8nReplacementEditor`、`N8nMcp`、`N8nFlow`、`lib/n8n.ts`、`lib/n8nEdit.ts`、`lib/n8nFlow.ts`、`lib/n8nCredentials.ts`、`lib/canvasNodes.ts`（若只被向导使用）、相关样式和 i18n 文案、相关测试。`ExportMenu` 里 n8n 一项改为打开新弹窗。
 - 服务端：`routes/n8n.ts`、`routes/n8nInstances.ts`、`n8n/analyzer.ts`、`n8n/drafter.ts`、`n8n/relay.ts`、`n8n/service.ts`、`n8n/mcpChecks.ts`、`n8n/instances.ts`、`db/repos/n8nConfigRepo.ts`、`db/schema/n8n.ts`、迁移 0003–0005（分支未合并，直接拿掉，新迁移从 0003 开始）、`config.ts` 里的 `N8N_INSTANCES`、对应测试。
-- 包：`packages/n8n-nodes`（白名单与节点定义快照、同步脚本）、`packages/integrations/src/n8n.ts`（n8n 适配器）、`packages/evals` 里的可执行性评测、`plugins/exporter-n8n`（main 上已有的确定性编译器也一起删，前端 `lib/exporters.ts` 里的 `exportN8nJson` 随之去掉）。此后 n8n 导出只有 skill 这一条路，必须先有授权。
+- 包：`packages/n8n-nodes`（白名单与节点定义快照、同步脚本）、`packages/evals` 里的可执行性评测、`plugins/exporter-n8n`（main 上已有的确定性编译器也一起删，前端 `lib/exporters.ts` 里的 `exportN8nJson` 随之去掉）。此后 n8n 导出只有 skill 这一条路，必须先有授权。
 - 部署与脚本：`docker-compose.yml` 的 `n8n-e2e` 服务、`scripts/n8n-e2e.sh`、`.github/workflows/n8n-e2e.yml`、`.env.example` 里的 n8n 实例说明。
 - 文档：`docs/n8n-guided-export.md`、`docs/n8n-guided-export-revision.md`、`docs/n8n-mcp-enhancement.md`、`docs/n8n-public-launch.md` 删除；本文件改名为实施记录。
 - 您 `.env` 里的 `N8N_INSTANCES` 这一行不再使用，可以删掉。
@@ -102,7 +102,7 @@
 - 模型不直接调用 MCP：它只能在 JSON 里请求 `search` / `types` / `credentials` / `done` 四个动作，由服务端执行并把结果文本交还；其他动作一律不执行。
 - 凭证只能引用本次 `list_credentials` 里出现过、类型一致的 id，其余去掉并写入“需要补的东西”。
 - 触发器的判断：类型名以 Trigger 结尾、已知的老触发节点（webhook、emailReadImap 等），以及搜索结果里 n8n 标出的 `[TRIGGER]`。
-- 内网地址拦截复用 `integrations/mcpTest.ts` 的判断，先解析域名再检查所有地址；解析和实际连接之间存在极小的重绑定窗口，和现有的集成连接测试一致。
+- 内网地址拦截复用 `lib/netguard.ts` 的判断，先解析域名再检查所有地址；解析和实际连接之间存在极小的重绑定窗口。
 
 **上线前需要做**
 - 在服务端环境里设置 `AUTH_SECRET_KEY`（`openssl rand -hex 32`），否则授权管理和 n8n 导出都是关闭的。

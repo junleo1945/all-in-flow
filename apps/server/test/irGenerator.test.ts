@@ -6,12 +6,12 @@ import { createIrGenerator, IrGenerationError } from "../src/agent/irGenerator.j
 import { buildIrSystemPrompt, IR_SYSTEM_PROMPT } from "../src/agent/irPrompt.js";
 import { salesReport } from "./fixtures.js";
 
-/** 一个通过校验的 v2 工作流：n1 调用 ERP 操作，n3/n4 带 action */
+/** 一个通过校验的 v2 工作流：n1 是 http 请求，n3/n4 带 action */
 function validV2(): WorkflowIR {
   const ir = structuredClone(migrateIr(salesReport));
   const byId = (id: string) => ir.nodes.find((n) => n.id === id)!;
   Object.assign(byId("n1"), {
-    action: { kind: "integration", integration: "erp", operation: "listOrders", params: { start: "2026-10-01", end: "2026-10-07" } },
+    action: { kind: "http", method: "GET", url: "https://erp.example.com/api/orders?start=2026-10-01&end=2026-10-07" },
     outputs: [{ name: "orders", type: "array", description: "订单列表" }],
   });
   Object.assign(byId("n3"), { action: { kind: "human", message: "请确认异常订单是否计入" } });
@@ -36,23 +36,23 @@ describe("IR 生成器（假模型）", () => {
     const gen = createIrGenerator({ runtime, model });
     const r = await gen("方案", "{}");
     expect(r.warnings).toEqual([]);
-    expect(r.ir.nodes.find((n) => n.id === "n1")).toMatchObject({ action: { kind: "integration", operation: "listOrders" } });
+    expect(r.ir.nodes.find((n) => n.id === "n1")).toMatchObject({ action: { kind: "http", method: "GET" } });
   });
 
-  it("校验失败后根据错误修复（操作不存在）", async () => {
+  it("校验失败后根据错误修复（引用了不存在的节点）", async () => {
     const { faux, runtime, model } = await setup();
     const bad = validV2();
-    (bad.nodes.find((n) => n.id === "n1") as any).action.operation = "noSuchOp";
+    (bad.nodes.find((n) => n.id === "n1") as any).action.url = "https://erp.example.com/api/orders?id={{n9.id}}";
     faux.setResponses([fauxAssistantMessage(json(bad)), fauxAssistantMessage(json(validV2()))]);
     const r = await createIrGenerator({ runtime, model })("方案", "{}");
     expect(r.warnings).toEqual([]);
-    expect(r.ir.nodes.find((n) => n.id === "n1")).toMatchObject({ action: { operation: "listOrders" } });
+    expect(r.ir.nodes.find((n) => n.id === "n1")).toMatchObject({ action: { kind: "http" } });
   });
 
   it("修复失败且只有 action 出错时，去掉这些 action 并给出警告", async () => {
     const { faux, runtime, model } = await setup();
     const bad = validV2();
-    (bad.nodes.find((n) => n.id === "n1") as any).action.operation = "noSuchOp";
+    (bad.nodes.find((n) => n.id === "n1") as any).action.url = "https://erp.example.com/api/orders?id={{n9.id}}";
     faux.setResponses([fauxAssistantMessage(json(bad)), fauxAssistantMessage(json(bad)), fauxAssistantMessage(json(bad))]);
     const r = await createIrGenerator({ runtime, model })("方案", "{}");
     const n1 = r.ir.nodes.find((n) => n.id === "n1")!;
@@ -73,17 +73,17 @@ describe("IR 生成器（假模型）", () => {
 });
 
 describe("IR 提示词", () => {
-  it("列出所有登记的操作，并要求 version 2", () => {
-    for (const op of ["listOrders", "sendText", "listPullRequests"]) expect(IR_SYSTEM_PROMPT).toContain(`"${op}"`);
+  it("要求 version 2，没有操作清单", () => {
     expect(IR_SYSTEM_PROMPT).toMatch(/version 为 2|version\(固定为 2\)/);
-    expect(IR_SYSTEM_PROMPT).toContain("没有登记操作的集成");
+    expect(IR_SYSTEM_PROMPT).toContain("就用 http action");
+    expect(IR_SYSTEM_PROMPT).not.toContain("操作清单");
     // 数据整理要写成能直接执行的形式：字段拼接用 transform，其余处理用 code
     expect(IR_SYSTEM_PROMPT).toContain("只用于字段拼接");
     expect(IR_SYSTEM_PROMPT).toContain('"kind":"code","language":"javascript"');
     expect(IR_SYSTEM_PROMPT).toContain("$input.first().json");
   });
 
-  it("没有操作时不会列出空的清单", () => {
-    expect(buildIrSystemPrompt([])).not.toContain('integration "');
+  it("提示词是静态的：每次构建结果相同", () => {
+    expect(buildIrSystemPrompt()).toBe(IR_SYSTEM_PROMPT);
   });
 });

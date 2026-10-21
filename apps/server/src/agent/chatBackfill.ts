@@ -62,11 +62,9 @@ export async function backfillChatInstructions(ir: WorkflowIR, ask: Ask): Promis
   const steps = missingChatSteps(ir);
   if (steps.length === 0) return { ir, filled: 0 };
 
-  const systems = new Map(ir.integrations.map((i) => [i.id, i.name]));
   const brief = steps.map((n) => {
     const s = n as Extract<WorkflowNode, { type: "step" }>;
-    const sys = s.integration ? systems.get(s.integration) ?? s.integration : "";
-    return { id: s.id, 步骤名: s.title, 系统: sys, 原说明: s.instructions };
+    return { id: s.id, 步骤名: s.title, 原说明: s.instructions };
   });
   const raw = await ask(SYSTEM, `工作流：${ir.name}\n${ir.description}\n\n需要补写的步骤：\n${JSON.stringify(brief, null, 1)}`);
   const parsed = parseJson(raw) as Record<string, unknown> | undefined;

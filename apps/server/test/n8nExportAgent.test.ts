@@ -15,7 +15,6 @@ const ir: WorkflowIR = {
   description: "每天早上读邮件并通知。当需要时使用。",
   trigger: { type: "manual", detail: "手动" },
   inputs: [],
-  integrations: [],
   nodes: [
     { id: "s", type: "start", title: "开始" },
     { id: "n1", type: "step", title: "到公司", executor: "human", instructions: "每天 8 点到公司", action: { kind: "human", message: "到公司" } },

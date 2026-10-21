@@ -9,7 +9,6 @@ const base = (nodes: WorkflowIR["nodes"]): WorkflowIR => ({
   description: "检查数据整理是否可执行。当需要检查时使用。",
   trigger: { type: "manual", detail: "手动" },
   inputs: [],
-  integrations: [],
   nodes: [{ id: "s", type: "start", title: "开始" }, ...nodes, { id: "e", type: "end", title: "结束" }],
   edges: [
     { from: "s", to: nodes[0]!.id },

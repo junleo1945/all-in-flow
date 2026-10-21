@@ -45,7 +45,6 @@ export function PromptExportPreview({
           filename: r.filename,
           notes: [
             t("exp.pNote"),
-            ...r.requirements.map((q) => t("exp.reqUse", { q })),
             ...r.warnings.map((w) => t("exp.warn", { w })),
           ],
         });

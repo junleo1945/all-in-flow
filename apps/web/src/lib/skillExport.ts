@@ -18,7 +18,6 @@ export interface SkillExportResult {
   files: Array<{ path: string; content: string }>;
   filename: string;
   issues: ExportIssue[];
-  requirements: string[];
   warnings: string[];
   todo: string[];
   /** 是否回退到了基础版本（模型不可用或写得不合格） */

@@ -2,8 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { validateWorkflow, type ValidateOptions, type ValidationIssue, type WorkflowIR, type WorkflowNode } from "@aif/workflow-ir";
-import { findOperation } from "@aif/integrations";
+import { validateWorkflow, type ValidationIssue, type WorkflowIR, type WorkflowNode } from "@aif/workflow-ir";
 import { createInterviewSession } from "./session.js";
 import { IR_SYSTEM_PROMPT } from "./irPrompt.js";
 import type { RuntimeModel } from "./models.js";
@@ -19,11 +18,9 @@ export interface GeneratedWorkflow {
 export interface IrGeneratorOptions {
   runtime: ModelRuntime;
   model: RuntimeModel;
-  /** 总尝试次数：1 次生成 + 最多 2 次修复（export-v2.md 4） */
+  /** 总尝试次数：1 次生成 + 最多 2 次修复 */
   maxAttempts?: number;
 }
-
-const VALIDATE_OPTIONS: ValidateOptions = { resolveOperation: findOperation };
 
 /**
  * 用 Pro 模型把方案摘要编译成 Workflow IR v2（design.md 4.5）。
@@ -57,7 +54,7 @@ export function createIrGenerator(opts: IrGeneratorOptions) {
           lastIssues = "输出不是合法的 JSON 对象";
           lastIssueList = [];
         } else {
-          const result = validateWorkflow(parsed, VALIDATE_OPTIONS);
+          const result = validateWorkflow(parsed);
           if (result.ok) return { ir: result.ir, warnings: result.warnings };
           lastIssueList = result.issues;
           lastIssues = result.issues.map((i) => `- ${i.nodeId ? `[${i.nodeId}] ` : ""}${i.message}`).join("\n");
@@ -76,7 +73,7 @@ export function createIrGenerator(opts: IrGeneratorOptions) {
 
 /**
  * 修复失败后的回退：如果所有问题都出在某些 step 的 action 上，去掉这些 action，
- * 步骤保留 instructions，退回文字说明（export-v2.md 4）。其他问题无法回退。
+ * 步骤保留 instructions，退回文字说明。其他问题无法回退。
  */
 export function withoutFailingActions(raw: unknown, issues: ValidationIssue[]): GeneratedWorkflow | undefined {
   if (!raw || typeof raw !== "object" || issues.length === 0) return undefined;
@@ -92,7 +89,7 @@ export function withoutFailingActions(raw: unknown, issues: ValidationIssue[]): 
     warnings.push(`步骤「${node.title}」的结构化执行方式未能通过校验，已退回为文字说明，请在对话中补充细节`);
   }
 
-  const result = validateWorkflow(candidate, VALIDATE_OPTIONS);
+  const result = validateWorkflow(candidate);
   return result.ok ? { ir: result.ir, warnings: [...warnings, ...result.warnings] } : undefined;
 }
 

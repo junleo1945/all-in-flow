@@ -1,5 +1,5 @@
 /**
- * 模型撰写的 Skill 草稿（skill-export-v3.md 5.3）：协议、解析和基本形状检查。
+ * 模型撰写的 Skill 草稿：协议、解析和基本形状检查。
  * 模型只产出 JSON，SKILL.md 由 assembleSkill 按固定顺序拼装，frontmatter 和各节的顺序不会被模型改坏。
  * 内容是否合规、是否忠实于流程图，由 validate.ts 检查。
  */

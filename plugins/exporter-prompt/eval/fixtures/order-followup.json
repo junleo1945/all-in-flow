@@ -17,14 +17,6 @@
       "required": true
     }
   ],
-  "integrations": [
-    {
-      "id": "erp",
-      "name": "ERP 订单",
-      "purpose": "拉取昨天下单且未发货的订单",
-      "access": "api"
-    }
-  ],
   "nodes": [
     {
       "id": "s",
@@ -36,17 +28,12 @@
       "type": "step",
       "title": "拉取未发货订单",
       "executor": "deterministic",
-      "integration": "erp",
       "instructions": "调用 ERP 的订单查询接口，拉取 target_date 当天下单且状态为未发货的订单列表。",
       "chatInstructions": "打开 ERP 的订单查询页面，把下单时间设为昨天的 00:00 到今天 00:00，发货状态筛选为“未发货”，然后导出这批订单列表。",
       "action": {
-        "kind": "integration",
-        "integration": "erp",
-        "operation": "listOrders",
-        "params": {
-          "start": "{{input.target_date}}",
-          "end": "{{input.target_date}}"
-        }
+        "kind": "http",
+        "method": "GET",
+        "url": "https://erp.example.com/api/orders?date={{input.target_date}}"
       },
       "outputs": [
         {

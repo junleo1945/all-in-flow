@@ -8,7 +8,6 @@
  */
 import { and, eq } from "drizzle-orm";
 import { migrateIr, validateWorkflow } from "@aif/workflow-ir";
-import { findOperation } from "@aif/integrations";
 import { createDb } from "../src/db/client.js";
 import { workflows, workflowVersions } from "../src/db/schema/index.js";
 import { addVersion } from "../src/db/repos/workflowRepo.js";
@@ -42,7 +41,7 @@ for (const wf of rows) {
   if (missing === 0) continue;
 
   const { ir: next, filled } = await backfillChatInstructions(ir, ask);
-  const check = validateWorkflow(next, { resolveOperation: findOperation });
+  const check = validateWorkflow(next);
   if (filled === 0 || !check.ok) {
     console.log(`跳过 ${wf.id}「${wf.name}」：缺 ${missing} 步，补写 ${filled} 步${check.ok ? "" : "，校验未通过"}`);
     continue;

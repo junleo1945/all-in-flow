@@ -1,6 +1,6 @@
 import { lookup as dnsLookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import { isPrivateAddress } from "../integrations/mcpTest.js";
+import { isPrivateAddress } from "../lib/netguard.js";
 
 /**
  * 与用户添加的 MCP 服务通信（n8n 导出用的是 n8n 的 MCP，见 n8n-export-skill.md）。

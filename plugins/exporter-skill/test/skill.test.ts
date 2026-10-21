@@ -10,10 +10,9 @@ const salesReportV1: WorkflowIRv1 = {
   description: "每周汇总 ERP 订单数据并生成销售周报。当用户需要写周报时使用。",
   trigger: { type: "schedule", detail: "每周五 17:00", cron: "0 17 * * 5" },
   inputs: [],
-  integrations: [{ id: "erp", name: "ERP", purpose: "拉取本周订单", access: "api", hint: "需要环境变量 ERP_TOKEN" }],
   nodes: [
     { id: "s", type: "start", title: "开始" },
-    { id: "n1", type: "step", title: "拉取本周订单", executor: "deterministic", integration: "erp", instructions: "调用 ERP 订单接口" },
+    { id: "n1", type: "step", title: "拉取本周订单", executor: "deterministic", instructions: "调用 ERP 订单接口" },
     { id: "n2", type: "decision", title: "有异常订单？" },
     { id: "n3", type: "step", title: "人工核对异常", executor: "human", instructions: "列出异常订单，请用户确认" },
     { id: "n4", type: "step", title: "生成周报", executor: "llm", instructions: "按模板汇总" },
@@ -41,8 +40,6 @@ describe("Agent Skill 导出", () => {
       "weekly-sales-report/references/workflow.mmd",
       "weekly-sales-report/references/workflow.json",
       "weekly-sales-report/INSTALL.md",
-      "weekly-sales-report/.env.example",
-      "weekly-sales-report/CONNECTIONS.md",
     ]);
     const json = JSON.parse(files[2]!.content);
     expect(json.slug).toBe("weekly-sales-report");
@@ -73,23 +70,18 @@ describe("Agent Skill 导出", () => {
     expect(order.map((n) => n.id)).toEqual(["n1", "n2", "n3", "n4"]);
   });
 
-  it("前置条件写入 compatibility 与正文", () => {
+  it("没有脚本时不写 compatibility，也没有前置条件一节", () => {
     const md = renderSkillMd(salesReport);
-    // compatibility 写运行环境要求（规范里这一栏的含义），不是业务系统清单
-    expect(md).toMatch(/^compatibility: "需要：能访问 ERP"$/m);
-    expect(md).toMatch(/## 前置条件[\s\S]*ERP 订单：通过 ERP 接口拉取订单数据。需要在本地配置 `ERP_BASE_URL`、`ERP_TOKEN`/);
+    expect(md).not.toContain("compatibility:");
+    expect(md).not.toContain("## 前置条件");
   });
 
-  it("requirements 列出运行前需要的条件", () => {
-    expect(skillExporter.requirements(lower(salesReport))).toEqual(
-      expect.arrayContaining(["ERP：需要在本地配置 ERP_BASE_URL（ERP 服务的企业内部地址（域名或 IP 加端口））", "ERP：需要在本地配置 ERP_TOKEN（ERP 接口的访问令牌）"]),
-    );
+  it("只导出 Skill 本身的文件，不生成连接说明、环境变量清单或 MCP 模板", () => {
+    const paths = skillExporter.compile(lower(salesReport), { target: "generic" }).map((f) => f.path);
+    for (const name of ["CONNECTIONS.md", ".env.example", "mcp.json.template"]) expect(paths.some((p) => p.endsWith(name))).toBe(false);
   });
 
-  it("supports：人工集成给出警告，非 automation 给出错误", () => {
-    const manual = structuredClone(salesReport);
-    manual.integrations[0]!.access = "manual";
-    expect(skillExporter.supports(lower(manual)).some((i) => i.level === "warning")).toBe(true);
+  it("supports：非 automation 给出错误", () => {
     const process = { ...structuredClone(salesReport), kind: "process" as const };
     expect(skillExporter.supports(lower(process)).some((i) => i.level === "error")).toBe(true);
     expect(skillExporter.supports(lower(salesReport)).filter((i) => i.level === "error")).toEqual([]);
@@ -104,108 +96,6 @@ describe("Agent Skill 导出", () => {
     loop.edges.push({ from: "n4", to: "n2" }); // 生成后回到判断
     const md = renderSkillMd(loop);
     expect(md.match(/判断：有异常订单/g)!.length).toBe(1);
-  });
-});
-
-describe("集成目录接入导出", () => {
-  const withCatalog: WorkflowIR = {
-    ...salesReport,
-    integrations: [
-      { id: "dingtalk-doc", name: "钉钉文档", purpose: "发布周报", access: "mcp" },
-      { id: "erp", name: "ERP", purpose: "拉取本周订单", access: "api" },
-    ],
-  };
-
-  it("前置条件写出需要配置的字段名和连通性检查，但不写真实值", () => {
-    const md = renderSkillMd(withCatalog);
-    expect(md).toContain("`DINGTALK_DOC_MCP_URL`");
-    expect(md).toContain("`ERP_TOKEN`");
-    expect(md).toMatch(/连通性检查：/);
-  });
-
-  it("导出 mcp.json.template：只有占位符，没有真实地址", () => {
-    const files = skillExporter.compile(lower(withCatalog), { target: "generic" });
-    const tpl = files.find((f) => f.path.endsWith("mcp.json.template"))!;
-    expect(tpl).toBeDefined();
-    const json = JSON.parse(tpl.content);
-    expect(json.mcpServers["钉钉文档"]).toEqual({ type: "streamable-http", url: "<填写 DINGTALK_DOC_MCP_URL>" });
-  });
-
-  it("INSTALL.md 指向模板文件，说明如何替换占位符", () => {
-    const install = skillExporter.compile(lower(withCatalog), { target: "generic" }).find((f) => f.path.endsWith("INSTALL.md"))!.content;
-    expect(install).toContain("mcp.json.template");
-    expect(install).toContain("占位符");
-    expect(install).not.toContain("${DINGTALK_DOC_MCP_URL}");
-  });
-
-  it("没有 MCP 集成时不生成模板文件", () => {
-    const files = skillExporter.compile(lower(salesReport), { target: "generic" });
-    expect(files.some((f) => f.path.endsWith("mcp.json.template"))).toBe(false);
-  });
-
-  it("导出的所有文件都不包含真实的 MCP 地址或 key", () => {
-    const all = skillExporter.compile(lower(withCatalog), { target: "claude-code" }).map((f) => f.content).join("\n");
-    expect(all).not.toMatch(/mcp-gw\.dingtalk\.com/);
-    expect(all).not.toMatch(/key=/);
-  });
-
-  it("未验证的集成给出警告；未登记的集成也给出警告", () => {
-    const issues = skillExporter.supports(lower({
-      ...withCatalog,
-      integrations: [...withCatalog.integrations, { id: "mystery", name: "神秘系统", purpose: "x", access: "api" }],
-    }));
-    expect(issues.some((i) => i.message.includes("钉钉文档") && i.message.includes("尚未在真实环境中验证"))).toBe(true);
-    expect(issues.some((i) => i.message.includes("神秘系统") && i.message.includes("未在集成目录中登记"))).toBe(true);
-  });
-
-  it("requirements 列出需要在本地配置的字段", () => {
-    expect(skillExporter.requirements(lower(withCatalog))).toEqual(
-      expect.arrayContaining([expect.stringContaining("需要在本地配置 DINGTALK_DOC_MCP_URL"), expect.stringContaining("需要在本地配置 ERP_TOKEN")]),
-    );
-  });
-});
-
-describe("API / CLI / Webhook 导出", () => {
-  const multi: WorkflowIR = {
-    ...salesReport,
-    integrations: [
-      { id: "erp", name: "ERP", purpose: "拉取订单", access: "api" },
-      { id: "dingtalk-bot", name: "钉钉群机器人", purpose: "发送周报", access: "webhook" },
-      { id: "github-cli", name: "GitHub CLI", purpose: "提交 PR", access: "cli" },
-    ],
-  };
-
-  it("生成 CONNECTIONS.md，包含三种方式的调用说明", () => {
-    const f = skillExporter.compile(lower(multi), { target: "generic" }).find((x) => x.path.endsWith("CONNECTIONS.md"))!;
-    expect(f).toBeDefined();
-    expect(f.content).toContain('curl -X GET "<填写 ERP_BASE_URL>');
-    expect(f.content).toContain("Authorization: Bearer <填写 ERP_TOKEN>");
-    expect(f.content).toContain('curl -X POST "<填写 DINGTALK_BOT_WEBHOOK_URL>"');
-    expect(f.content).toContain("gh --version");
-    expect(f.content).toContain("gh auth status");
-  });
-
-  it("CONNECTIONS.md 中没有任何真实地址、令牌或 key", () => {
-    const f = skillExporter.compile(lower(multi), { target: "generic" }).find((x) => x.path.endsWith("CONNECTIONS.md"))!;
-    expect(f.content).not.toMatch(/https?:\/\//);
-    expect(f.content).not.toMatch(/key=|access_token=|Bearer [A-Za-z0-9]/);
-  });
-
-  it("没有 API / CLI / Webhook 集成时不生成 CONNECTIONS.md", () => {
-    const none = { ...salesReport, integrations: [] };
-    expect(skillExporter.compile(lower(none), { target: "generic" }).some((x) => x.path.endsWith("CONNECTIONS.md"))).toBe(false);
-  });
-
-  it("SKILL.md 的前置条件指向对应的说明文件", () => {
-    const md = renderSkillMd(multi);
-    expect(md).toContain("调用方式见 `CONNECTIONS.md`");
-  });
-
-  it("未验证的 API / CLI / Webhook 都会给出警告", () => {
-    const msgs = skillExporter.supports(lower(multi)).map((i) => i.message).join("\n");
-    expect(msgs).toContain("ERP");
-    expect(msgs).toContain("钉钉群机器人");
-    expect(msgs).toContain("GitHub CLI");
   });
 });
 
@@ -227,7 +117,6 @@ describe("并行分支的编号", () => {
     description: "并行拉取数据后汇总。当用户需要并行汇总数据时使用。",
     trigger: { type: "manual", detail: "手动" },
     inputs: [],
-    integrations: [],
     nodes: [
       { id: "s", type: "start", title: "开始" },
       { id: "x1", type: "step", title: "拉取订单", executor: "deterministic", instructions: "拉取订单" },
@@ -274,7 +163,6 @@ describe("嵌套并行", () => {
     description: "嵌套并行处理数据。当用户需要嵌套并行汇总时使用。",
     trigger: { type: "manual", detail: "手动" },
     inputs: [],
-    integrations: [],
     nodes: [
       { id: "s", type: "start", title: "开始" },
       { id: "a1", type: "step", title: "准备分区", executor: "deterministic", instructions: "切分数据分区" },
@@ -333,7 +221,6 @@ describe("并行分支中含判断节点", () => {
     description: "并行读取订单和库存，超标订单需复核。当用户需要核对订单与库存时使用。",
     trigger: { type: "manual", detail: "手动" },
     inputs: [],
-    integrations: [],
     nodes: [
       { id: "s", type: "start", title: "开始" },
       { id: "a1", type: "step", title: "读取订单", executor: "deterministic", instructions: "读取本周订单", outputs: [{ name: "orders", type: "array", description: "订单" }] },
@@ -384,7 +271,6 @@ describe("循环穿过并行区域", () => {
     description: "并行拉取订单与库存并对账，不平衡时重新拉取。当用户需要反复对账直到平衡时使用。",
     trigger: { type: "manual", detail: "手动" },
     inputs: [],
-    integrations: [],
     nodes: [
       { id: "s", type: "start", title: "开始" },
       { id: "a1", type: "step", title: "拉取订单", executor: "deterministic", instructions: "拉取本周订单", outputs: [{ name: "orders", type: "array", description: "订单" }] },
@@ -442,7 +328,6 @@ describe("循环体范围：不包含同一编号区间内、但不在循环里�
     description: "拉取订单并与库存汇合对账，不平衡时重新拉取订单。当用户需要反复对账时使用。",
     trigger: { type: "manual", detail: "手动" },
     inputs: [],
-    integrations: [],
     nodes: [
       { id: "s", type: "start", title: "开始" },
       { id: "x1", type: "step", title: "拉取订单", executor: "deterministic", instructions: "拉取本周订单" },

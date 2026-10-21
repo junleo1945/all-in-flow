@@ -28,8 +28,7 @@ const result: skillExport.SkillExportResult = {
     { path: "weekly/evals/evals.json", content: "{}" },
   ],
   filename: "weekly.skill.zip",
-  issues: [{ level: "warning", message: "集成「ERP」尚未验证" }],
-  requirements: ["ERP：需要配置 ERP_TOKEN"],
+  issues: [{ level: "warning", message: "description 缺少使用时机" }],
   warnings: ["正文偏长"],
   todo: ["确认周报模板"],
   fallback: false,
@@ -87,7 +86,7 @@ describe("导出 Agent Skill 弹窗", () => {
     await flush();
     expect(document.querySelector(".ep-code")?.textContent).toBe("# 周报");
     const text = document.body.textContent!;
-    for (const part of ["运行前需要：ERP：需要配置 ERP_TOKEN", "注意：集成「ERP」尚未验证", "注意：正文偏长", "待确认：确认周报模板"]) expect(text).toContain(part);
+    for (const part of ["注意：description 缺少使用时机", "注意：正文偏长", "待确认：确认周报模板"]) expect(text).toContain(part);
     expect(text).not.toContain("已使用基础版本");
     expect(ex.buildSkill).not.toHaveBeenCalled();
 
@@ -145,7 +144,7 @@ describe("导出 Agent Skill 弹窗", () => {
 
   it("服务端没有启用（503）：不打扰用户，直接给浏览器内的基础版本，并说明", async () => {
     vi.spyOn(skillExport, "exportSkill").mockRejectedValue(new ApiError(503, "Skill 生成未启用", 503));
-    vi.mocked(ex.buildSkill).mockResolvedValue({ files: [{ path: "weekly/SKILL.md", content: "# 基础" }], filename: "weekly.skill.zip", warnings: ["注意项"], requirements: ["需要 bash"] } as never);
+    vi.mocked(ex.buildSkill).mockResolvedValue({ files: [{ path: "weekly/SKILL.md", content: "# 基础" }], filename: "weekly.skill.zip", warnings: ["注意项"] } as never);
     await render();
     expect(ex.buildSkill).toHaveBeenCalledWith(expect.objectContaining({ patched: {} }), { target: "generic", packaging: "zip" });
     expect(document.querySelector(".ep-code")?.textContent).toBe("# 基础");
@@ -155,7 +154,7 @@ describe("导出 Agent Skill 弹窗", () => {
 
   it("没有所属工作流（无法请求服务端）：直接用基础版本", async () => {
     const spy = vi.spyOn(skillExport, "exportSkill");
-    vi.mocked(ex.buildSkill).mockResolvedValue({ files: [{ path: "a/SKILL.md", content: "x" }], filename: "a.skill.zip", warnings: [], requirements: [] } as never);
+    vi.mocked(ex.buildSkill).mockResolvedValue({ files: [{ path: "a/SKILL.md", content: "x" }], filename: "a.skill.zip", warnings: [] } as never);
     await render({ workflowId: undefined });
     expect(spy).not.toHaveBeenCalled();
     expect(ex.buildSkill).toHaveBeenCalled();
@@ -175,7 +174,7 @@ describe("导出 Agent Skill 弹窗", () => {
 
   it("失败后选择基础版本", async () => {
     vi.spyOn(skillExport, "exportSkill").mockRejectedValue(new Error("网络错误"));
-    vi.mocked(ex.buildSkill).mockResolvedValue({ files: [{ path: "a/SKILL.md", content: "# 基础" }], filename: "a.skill.zip", warnings: [], requirements: [] } as never);
+    vi.mocked(ex.buildSkill).mockResolvedValue({ files: [{ path: "a/SKILL.md", content: "# 基础" }], filename: "a.skill.zip", warnings: [] } as never);
     await render();
     await act(async () => button("使用基础版本").click());
     await flush();

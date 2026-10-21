@@ -14,10 +14,9 @@ const plugin = (capabilities: ExporterPlugin["capabilities"], supports: Exporter
     capabilities,
     supports,
     compile: () => [],
-    requirements: () => [],
   }) as ExporterPlugin;
 
-describe("能力检查（export-v2.md 6.2）", () => {
+describe("能力检查", () => {
   it("未声明的能力报错，并带上节点", () => {
     const issues = capabilityIssues({}, lower(v2Sample()).features);
     const err = issues.find((i) => i.message.includes("条件分支"));

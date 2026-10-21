@@ -1,6 +1,6 @@
 import type { WorkflowIR } from "../src/index.js";
 
-/** export-v2.md 第 3 节：输入、API 调用、foreach 子流程、expr 判断、人工确认、LLM 生成 */
+/** 输入、API 调用、foreach 子流程、expr 判断、人工确认、LLM 生成 */
 export const v2Sample = (): WorkflowIR => ({
   version: 2,
   kind: "automation",
@@ -9,10 +9,6 @@ export const v2Sample = (): WorkflowIR => ({
   description: "每周检查 ERP 订单并生成周报。当用户需要检查本周订单时使用。",
   trigger: { type: "schedule", detail: "每周五 17:00", cron: "0 17 * * 5" },
   inputs: [{ name: "week", type: "string", description: "周次", required: true }],
-  integrations: [
-    { id: "erp", name: "ERP", purpose: "拉取订单", access: "api" },
-    { id: "dingtalk-bot", name: "钉钉群机器人", purpose: "通知", access: "webhook" },
-  ],
   nodes: [
     { id: "s", type: "start", title: "开始" },
     {
@@ -20,14 +16,8 @@ export const v2Sample = (): WorkflowIR => ({
       type: "step",
       title: "拉取本周订单",
       executor: "deterministic",
-      integration: "erp",
       instructions: "调用 ERP 查询订单",
-      action: {
-        kind: "integration",
-        integration: "erp",
-        operation: "listOrders",
-        params: { start: "{{input.week}}", end: "{{input.week}}" },
-      },
+      action: { kind: "http", method: "GET", url: "https://erp.example.com/api/orders?week={{input.week}}" },
       outputs: [{ name: "orders", type: "array", description: "订单列表" }],
     },
     {

@@ -9,7 +9,7 @@ export interface ActionCoverage {
   ratio: number | null;
 }
 
-/** 有结构化 action 的 step 占比（export-v2.md 4：action 覆盖率） */
+/** 有结构化 action 的 step 占比（action 覆盖率） */
 export function actionCoverage(ir: WorkflowIR): ActionCoverage {
   const steps: WorkflowNode[] = [];
   const walk = (nodes: WorkflowNode[]) => {

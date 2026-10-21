@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// 当前版本是 v2（docs/export-v2.md 第 3 节）。v1 只保留 schema 用于迁移，见 migrate.ts。
+// 当前版本是 v2。v1 只保留 schema 用于迁移，见 migrate.ts。
 
 const SlugSchema = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "slug 必须是 kebab-case 英文");
 
@@ -14,24 +14,10 @@ export const RefSchema = z.string().regex(REF_PATTERN, "引用格式应为 input
 /** 节点的执行方式：决定导出时写成脚本、AI 指令，还是人工确认。 */
 export const ExecutorSchema = z.enum(["deterministic", "llm", "human"]);
 
-export const IntegrationAccessSchema = z.enum(["mcp", "api", "cli", "webhook", "manual"]);
-
 export const TriggerSchema = z.object({
   type: z.enum(["manual", "schedule", "event"]),
   detail: z.string(),
   cron: z.string().optional(),
-  /** 事件触发的来源集成，例如收到新邮件（integrations 中的 id）；没有时导出为通用 Webhook */
-  integration: z.string().optional(),
-  /** 来源集成中的事件名，例如 newMail */
-  event: z.string().optional(),
-});
-
-export const IntegrationSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  purpose: z.string(),
-  access: IntegrationAccessSchema,
-  hint: z.string().optional(),
 });
 
 export const WorkflowSourceSchema = z.object({
@@ -63,12 +49,6 @@ const FormFieldSchema = z.object({
 const TemplateSchema = z.string();
 
 export const ActionSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("integration"),
-    integration: z.string(),
-    operation: z.string(),
-    params: z.record(z.string(), TemplateSchema),
-  }),
   z.object({
     kind: z.literal("http"),
     method: z.enum(["GET", "POST", "PUT", "DELETE"]),
@@ -114,7 +94,7 @@ export const CONDITION_OPS = [
 ] as const;
 export type ConditionOp = (typeof CONDITION_OPS)[number];
 
-/** 条件表达式：只支持这个固定子集（export-v2.md 3.4） */
+/** 条件表达式：只支持这个固定子集 */
 export type Condition =
   | { all: Condition[] }
   | { any: Condition[] }
@@ -164,7 +144,6 @@ const StepNodeSchema = z.object({
   type: z.literal("step"),
   title: TitleSchema,
   executor: ExecutorSchema,
-  integration: z.string().optional(),
   instructions: z.string().min(1),
   /** 聊天场景下给用户看的操作说明（在哪个系统里点哪里、导出什么）；没有时导出器回退到 instructions */
   chatInstructions: z.string().optional(),
@@ -241,7 +220,6 @@ export const WorkflowIRSchema = z.object({
   description: z.string().min(1),
   trigger: TriggerSchema,
   inputs: z.array(VariableSchema),
-  integrations: z.array(IntegrationSchema),
   nodes: z.array(NodeSchema),
   edges: z.array(EdgeSchema),
   source: WorkflowSourceSchema,
@@ -261,7 +239,6 @@ const V1NodeSchema = z
     type: z.enum(["start", "step", "decision", "end"]),
     title: z.string().min(1),
     executor: ExecutorSchema.optional(),
-    integration: z.string().optional(),
     instructions: z.string().optional(),
     inputs: z.array(z.string()).optional(),
     outputs: z.array(z.string()).optional(),
@@ -286,7 +263,6 @@ export const WorkflowIRv1Schema = z.object({
   description: z.string().min(1),
   trigger: TriggerSchema,
   inputs: z.array(V1InputSchema),
-  integrations: z.array(IntegrationSchema),
   nodes: z.array(V1NodeSchema),
   edges: z.array(z.object({ from: z.string(), to: z.string(), label: z.string().optional() })),
   source: WorkflowSourceSchema,

@@ -9,15 +9,13 @@ import {
   renderSteps,
   type StepNodeType,
 } from "@aif/workflow-ir";
-import { findIntegration, type IntegrationEntry } from "@aif/integrations";
-import { connectionEntries, renderConnections } from "./connections.js";
 import { collectSteps, buildFacts, type SkillFacts } from "./facts.js";
-import { planScripts, renderEnvExample, type ScriptPlan, type ScriptPlanResult } from "./scripts.js";
-import { COMPATIBILITY_LIMIT, DESCRIPTION_LIMIT, FIRST_PERSON, describesWhenToUse } from "./validate.js";
+import { planScripts, type ScriptPlan, type ScriptPlanResult } from "./scripts.js";
+import { DESCRIPTION_LIMIT, FIRST_PERSON, describesWhenToUse } from "./validate.js";
 import { SECTION_HEADINGS, SECTION_KEYS, evalsJson, type AuthorDraft } from "./author.js";
 
 export { orderSteps, conditionText } from "@aif/workflow-ir";
-export { buildFacts, collectSteps, unconfirmedPaths, type SkillFacts, type FactStep } from "./facts.js";
+export { buildFacts, collectSteps, type SkillFacts, type FactStep } from "./facts.js";
 export { validateSkill, describesWhenToUse, type SkillIssue, type ValidateOptions } from "./validate.js";
 export { parseAuthorDraft, evalsJson, SECTION_KEYS, SECTION_HEADINGS, type AuthorDraft, type SectionKey } from "./author.js";
 
@@ -26,7 +24,7 @@ export interface SkillOptions {
   target: "generic" | "claude-code" | "pi";
   /**
    * 打包方式：zip 解压即用（个人试用）；claude-plugin 是 Claude Code 插件，
-   * 可以放进公司内部的 git marketplace 统一更新（export-v2.md 7.4）
+   * 可以放进公司内部的 git marketplace 统一更新
    */
   packaging?: "zip" | "claude-plugin";
 }
@@ -56,7 +54,6 @@ export const skillExporter: ExporterPlugin<SkillOptions> = {
     "trigger:manual": "full",
     "trigger:schedule": "full",
     "trigger:event": "full",
-    "action:integration": "full",
     "action:http": "full",
     "action:llm": "full",
     "action:transform": "full",
@@ -87,33 +84,10 @@ export const skillExporter: ExporterPlugin<SkillOptions> = {
     for (const u of unsupported) {
       issues.push({ level: "warning", nodeId: u.stepId, message: `步骤「${u.title}」无法生成脚本（${u.reason}），将以文字说明导出` });
     }
-    for (const i of ir.integrations) {
-      const entry = findIntegration(i.id);
-      if (!entry) {
-        issues.push({ level: "warning", message: `集成「${i.name}」未在集成目录中登记，Skill 中只能写成模型推断的说明。` });
-        continue;
-      }
-      if (!entry.verified && entry.access !== "manual") {
-        issues.push({ level: "warning", message: `集成「${i.name}」尚未在真实环境中验证连通性，使用前请先执行连通性检查。` });
-      }
-      if (entry.access === "manual") {
-        issues.push({ level: "warning", message: `集成「${i.name}」需要人工操作，Skill 中只能写成说明，无法自动执行。` });
-      }
-    }
     if (ir.kind !== "automation") {
       issues.push({ level: "error", message: "只有 automation 类型的工作流可以导出为 Skill。" });
     }
     return issues;
-  },
-
-  requirements(graph: ExecGraph): string[] {
-    return graph.ir.integrations.flatMap((i) => {
-      const entry = findIntegration(i.id);
-      if (!entry) return [`${i.name}：${i.hint ?? i.purpose}`];
-      return entry.fields.length
-        ? entry.fields.map((v) => `${i.name}：需要在本地配置 ${v.name}（${v.description}）`)
-        : [`${i.name}：无需额外配置`];
-    });
   },
 
   compile(graph: ExecGraph, options: SkillOptions): ExportFile[] {
@@ -145,12 +119,6 @@ export function skeleton(ir: WorkflowIR, options: SkillOptions): { files: Export
     { path: `INSTALL.md`, content: renderInstall(ir, options, plans) },
   ];
   for (const plan of plans.values()) files.push({ path: plan.path, content: plan.content });
-  const env = renderEnvExample(ir);
-  if (env) files.push({ path: `.env.example`, content: env });
-  const mcp = mcpTemplate(ir);
-  if (mcp) files.push({ path: `mcp.json.template`, content: mcp });
-  const connections = renderConnections(ir);
-  if (connections) files.push({ path: `CONNECTIONS.md`, content: connections });
   return { files, plans, unsupported };
 }
 
@@ -171,31 +139,11 @@ const TAG: Record<string, string> = {
 const skillTag = (n: StepNodeType) => (n.executor ? `〔${TAG[n.executor]}〕` : undefined);
 
 export function renderSkillMd(ir: WorkflowIR, plans: Map<string, ScriptPlan> = new Map()): string {
-  const integrations = ir.integrations;
   const compat = compatibilityText(ir, plans);
 
   const lines: string[] = [...frontmatterLines(ir, ir.description, compat), "", `# ${ir.name}`, ""];
 
   lines.push("## 触发方式", "", triggerLine(ir), "");
-
-  if (integrations.length) {
-    lines.push("## 前置条件", "");
-    for (const i of integrations) {
-      const entry = findIntegration(i.id);
-      if (!entry) {
-        lines.push(`- ${i.name}：${i.purpose}${i.hint ? `（${i.hint}）` : ""}（未在集成目录中登记，请先确认访问方式）`);
-        continue;
-      }
-      const fields = entry.fields.map((v) => `\`${v.name}\``).join("、");
-      lines.push(`- ${entry.name}：${entry.summary}${fields ? `。需要在本地配置 ${fields}` : ""}`);
-      lines.push(`  - 连通性检查：${entry.verify}`);
-      if (entry.access === "api" || entry.access === "cli" || entry.access === "webhook") lines.push("  - 调用方式见 `CONNECTIONS.md`。");
-      if (entry.access === "mcp") lines.push("  - 配置方式见 `mcp.json.template`。");
-      if (!entry.verified && entry.access !== "manual") lines.push("  - 注意：此集成尚未在真实环境中验证，请先完成连通性检查。");
-      if (entry.notes) lines.push(`  - 说明：${entry.notes}`);
-    }
-    lines.push("");
-  }
 
   if (ir.inputs.length) {
     lines.push("## 输入", "");
@@ -213,9 +161,7 @@ export function renderSkillMd(ir: WorkflowIR, plans: Map<string, ScriptPlan> = n
   lines.push("## 执行约定", "");
   lines.push("- 标记〔需要确认〕的步骤，等用户明确回复后再继续。这类步骤需要用户本人判断或操作，替用户回答会让结果不可信。");
   lines.push("- 任何一步失败时，停下来说明失败原因，不要跳过。后面的步骤依赖前面的输出，跳过会让结果悄悄出错。");
-  lines.push(
-    `- 标记〔脚本〕的步骤，运行对应的脚本${connectionEntries(ir).length ? "，或按 `CONNECTIONS.md` 调用" : ""}，不要凭记忆编造结果。编造的数据看上去正常，却无法核对。`,
-  );
+  lines.push("- 标记〔脚本〕的步骤，运行对应的脚本，不要凭记忆编造结果。编造的数据看上去正常，却无法核对。");
   lines.push("- 脚本打印到标准输出的内容就是该步骤的输出。按步骤里「输出」列出的变量名记住它，后面的步骤要用时直接取。");
   if (ir.inputs.length) lines.push("- 「输入」里列出的信息缺失时，先向用户索取，不要自行猜测。");
   lines.push("");
@@ -331,86 +277,32 @@ function dataReferences(ir: WorkflowIR): string[] {
 
 /**
  * compatibility 写运行环境要求（规范里这一栏的含义），不是依赖的业务系统清单：
- * 脚本需要的解释器、命令行工具、MCP 服务，以及需要联网访问的系统。没有任何要求时不写这一栏。
+ * 脚本需要的解释器。没有任何要求时不写这一栏。
  */
 export function compatibilityText(ir: WorkflowIR, plans: Map<string, ScriptPlan> = new Map()): string | undefined {
   const paths = [...plans.values()].map((p) => p.path);
   const need: string[] = [];
-  if (paths.some((p) => p.endsWith(".sh"))) need.push("bash");
-  if ([...plans.values()].some((p) => p.content.includes("curl "))) need.push("curl");
   if (paths.some((p) => p.endsWith(".mjs"))) need.push("Node.js 20 及以上");
   if (paths.some((p) => p.endsWith(".py"))) need.push("python3");
-  const reach: string[] = [];
-  for (const i of ir.integrations) {
-    const entry = findIntegration(i.id);
-    const access = entry?.access ?? i.access;
-    if (access === "cli" && entry?.cli) need.push(`${entry.cli.command} 命令行工具`);
-    else if (access === "mcp") need.push(`MCP 服务「${i.name}」`);
-    else if (access !== "manual") reach.push(i.name);
-  }
-  if (reach.length) need.push(`能访问 ${reach.join("、")}`);
   if (!need.length) return undefined;
-  const text = `需要：${need.join("、")}`;
-  return text.length > COMPATIBILITY_LIMIT ? `${text.slice(0, COMPATIBILITY_LIMIT - 1)}…` : text;
-}
-
-/**
- * .mcp.json 模板：地址处只放占位符，使用者在自己的副本中替换为真实地址。
- * 模板本身不含任何真实地址或密钥。
- */
-export function mcpTemplate(ir: WorkflowIR): string | undefined {
-  const servers = Object.fromEntries(
-    ir.integrations
-      .map((i) => findIntegration(i.id))
-      .filter((e): e is IntegrationEntry => !!e && e.access === "mcp" && !!e.mcp?.urlField)
-      .map((e) => [e.mcp!.serverName, { type: e.mcp!.transport, url: `<填写 ${e.mcp!.urlField}>` }]),
-  );
-  if (Object.keys(servers).length === 0) return undefined;
-  return JSON.stringify({ mcpServers: servers }, null, 2) + "\n";
-}
-
-/** INSTALL.md 中的 MCP 说明：指向模板文件，不再直接写配置 */
-function mcpSnippet(ir: WorkflowIR): string[] {
-  if (!mcpTemplate(ir)) return [];
-  return [
-    "## MCP 配置",
-    "",
-    "1. 复制 `mcp.json.template` 为项目根目录的 `.mcp.json`（或合并到你已有的 `.mcp.json` 中）。",
-    "2. 把模板中 `<填写 …>` 的占位符替换为你自己的服务地址。地址可能包含访问凭证，不要提交到代码仓库。",
-    "3. 在 Agent 中确认 MCP 服务已经连接。",
-    "",
-  ];
+  return `需要：${need.join("、")}`;
 }
 
 function renderInstall(ir: WorkflowIR, options: SkillOptions, plans: Map<string, ScriptPlan> = new Map()): string {
-  const hasTransform = [...plans.values()].some((p) => p.path.endsWith(".mjs") || p.path.endsWith(".py"));
   const needsScripts = plans.size > 0;
   return [
     `# 安装「${ir.name}」`,
     "",
     INSTALL_HINT[options.target],
     "",
-    "## 运行前需要准备",
-    "",
-    ...(ir.integrations.length
-      ? ir.integrations.map((i) => {
-          const e = findIntegration(i.id);
-          return e ? `- ${e.name}：${e.summary}（需要配置：${e.fields.map((v) => v.name).join("、") || "无"}）` : `- ${i.name}：${i.hint ?? i.purpose}`;
-        })
-      : ["- 无额外依赖"]),
-    "",
     ...(needsScripts
       ? [
           "## 脚本",
           "",
-          "- 脚本需要 bash 和 curl（外部接口、Webhook）；命令行工具需要事先安装，见 CONNECTIONS.md。",
-          ...(hasTransform ? ["- 数据整理与代码步骤需要 Node.js 20 或更高版本（Python 步骤需要 python3）。"] : []),
-          "- 脚本会读取 Skill 根目录下的 `.env`。",
+          "- 数据整理与代码步骤需要 Node.js 20 或更高版本（Python 步骤需要 python3）。",
           "",
         ]
       : []),
-    ...(renderEnvExample(ir) ? ["## 配置", "", "复制 `.env.example` 为 `.env`，填写其中的值。`.env` 不要提交到代码仓库。", ""] : []),
-    ...mcpSnippet(ir),
     "准备好以后，在 Agent 中输入 `/" + ir.slug + "` 或直接描述你的需求即可触发。",
     "",
   ].join("\n");

@@ -23,7 +23,6 @@ const ir = (kind: "automation" | "process" = "automation"): WorkflowIR => ({
   description: "汇总周报。当用户需要写周报时使用。",
   trigger: { type: "manual", detail: "手动" },
   inputs: [],
-  integrations: [],
   nodes: [
     { id: "s", type: "start", title: "开始" },
     { id: "n1", type: "step", title: "生成周报", executor: "llm", instructions: "按模板汇总本周数据", action: { kind: "llm", prompt: "生成周报" } },
@@ -40,7 +39,6 @@ const okResult: SkillAuthorResult = {
   files: [{ path: "weekly/SKILL.md", content: "---\nname: weekly\n---\n" }],
   filename: "weekly.skill.zip",
   issues: [],
-  requirements: ["运行前需要：无"],
   warnings: [],
   todo: ["确认模板"],
   fallback: false,

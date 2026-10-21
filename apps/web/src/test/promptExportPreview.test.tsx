@@ -19,7 +19,6 @@ vi.mock("../lib/exporters", async () => {
       files: await plugin.promptExporter.compile(lower(ir), plugin.promptExporter.defaultOptions),
       filename: `${ir.slug}.prompt.zip`,
       warnings: [],
-      requirements: [],
     }),
     download: () => {},
     zipFiles: async () => new Blob(),
@@ -35,7 +34,6 @@ const IR: WorkflowIR = {
   description: "生成周报。当用户需要周报时使用。",
   trigger: { type: "manual", detail: "用户发起" },
   inputs: [],
-  integrations: [],
   nodes: [
     { id: "s", type: "start", title: "开始" },
     { id: "n1", type: "step", title: "生成周报", executor: "llm", instructions: "按模板汇总", action: { kind: "llm", prompt: "按模板生成周报" } },

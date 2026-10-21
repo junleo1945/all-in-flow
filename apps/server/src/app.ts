@@ -16,7 +16,6 @@ import { shareRoutes } from "./routes/shares.js";
 import { adminRoutes } from "./routes/admin.js";
 import { exporterRoutes } from "./routes/exporters.js";
 import { attachmentRoutes } from "./routes/attachments.js";
-import { integrationRoutes } from "./routes/integrations.js";
 import { FixedWindowLimiter as Limiter } from "./auth/limiter.js";
 import type { AttachmentService } from "./attachments/service.js";
 import type { ExporterPlugin } from "@aif/workflow-ir";
@@ -72,8 +71,6 @@ export function createApp(deps: AppDeps) {
   app.route("/api/conversations", conversationRoutes(deps));
   app.use("/api/attachments/*", authed);
   app.route("/api", attachmentRoutes({ attachments: deps.attachments }));
-  app.use("/api/integrations/*", authed);
-  app.route("/api/integrations", integrationRoutes({ limiter: new Limiter(10, 60_000) }));
   app.use("/api/workflows/*", authed);
   app.route("/api/workflows", workflowRoutes(deps));
   app.use("/api/authorizations", authed);

@@ -5,7 +5,6 @@ import type { Db } from "../db/client.js";
 import { addVersion, getWorkflowForUser, listVersions, getVersion, NotFoundError } from "../db/repos/workflowRepo.js";
 import { workflows } from "../db/schema/index.js";
 import { migrateIr, validateWorkflow } from "@aif/workflow-ir";
-import { findOperation } from "@aif/integrations";
 import { desc, eq } from "drizzle-orm";
 import { tm } from "../i18n.js";
 
@@ -60,7 +59,7 @@ export function workflowRoutes(deps: { db: Db }) {
     const wf = await guard(() => getWorkflowForUser(deps.db, userId, c.req.param("id")));
     const body = (await c.req.json().catch(() => null)) as { ir?: unknown } | null;
     if (!body || typeof body.ir !== "object" || body.ir === null) throw new AppError(400, tm(c.get("locale"), "wf.missingIr"));
-    const result = validateWorkflow(body.ir, { resolveOperation: findOperation });
+    const result = validateWorkflow(body.ir);
     if (!result.ok) {
       const errors = result.issues.filter((i) => i.level === "error").map((i) => i.message);
       throw new AppError(400, tm(c.get("locale"), "wf.invalid", { errors: errors.slice(0, 3).join("；") }));

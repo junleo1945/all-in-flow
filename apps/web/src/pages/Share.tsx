@@ -80,7 +80,6 @@ export default function SharePage() {
                 <p>{data.ir.description}</p>
                 <dl className="facts">
                   <dt>{t("share.trigger")}</dt><dd>{data.ir.trigger.detail}</dd>
-                  {data.ir.integrations.length > 0 && (<><dt>{t("share.prereq")}</dt><dd>{data.ir.integrations.map((i) => i.name).join(t("share.listSep"))}</dd></>)}
                   <dt>{t("share.steps")}</dt><dd>{t("share.stepCount", { n: data.ir.nodes.filter((n) => n.type === "step").length })}</dd>
                 </dl>
               </div>
