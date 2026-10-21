@@ -295,7 +295,7 @@ export interface RenderStepsOptions {
   /** 编号前缀；子流程用 "3." 得到 3.1、3.2……，默认无前缀 */
   prefix?: string;
   /** 确定性步骤生成的脚本，key 为节点 id */
-  scripts?: Map<string, { path: string; args: string[] }>;
+  scripts?: Map<string, { path: string; args: string[]; usage?: string }>;
   /** 步骤标题后的标记（例如〔脚本〕），返回 undefined 时不加 */
   tag?: (n: StepNodeType) => string | undefined;
   /**
@@ -316,7 +316,7 @@ export interface RenderStepsOptions {
  * Agent Skill 与提示词导出共用，差别只在标记、foreach 的写法和结束语。
  */
 export function renderSteps(ir: WorkflowIR, options: RenderStepsOptions = {}): string[] {
-  const { prefix = "", scripts = new Map<string, { path: string; args: string[] }>(), tag = () => undefined, foreach, endLabels } = options;
+  const { prefix = "", scripts = new Map<string, { path: string; args: string[]; usage?: string }>(), tag = () => undefined, foreach, endLabels } = options;
   const condText = options.conditionText ?? conditionText;
   const outText = options.outputsText ?? outputsText;
   const { order, number, byId, out } = orderSteps(ir);
@@ -359,7 +359,9 @@ export function renderSteps(ir: WorkflowIR, options: RenderStepsOptions = {}): s
     }
     if (n.type !== "step") continue;
     const plan = scripts.get(n.id);
-    const run = plan ? `运行 \`${plan.path}\`${plan.args.length ? `，参数依次为：${plan.args.map((a) => `\`${a}\``).join("、")}` : ""}` : undefined;
+    const run = plan
+      ? `运行 \`${plan.path}\`${plan.args.length ? `，参数依次为：${plan.args.map((a) => `\`${a}\``).join("、")}` : ""}${plan.usage ? `，${plan.usage}` : ""}`
+      : undefined;
     const human = n.executor === "human" ? "暂停，等用户回复后再继续" : undefined;
     lines.push(joinStep(`${label}. **${n.title}**${tag(n) ?? ""}`, [n.instructions, run, n.outputs?.length ? outText(n.outputs) : undefined, parallel, loopMark, endMark, human, next]));
   }

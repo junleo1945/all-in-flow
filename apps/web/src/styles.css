@@ -539,5 +539,7 @@ table.tasks { width: 100%; border-collapse: collapse; font-size: 13px; }
 .auth-dialog, .n8n-export { white-space: normal; }
 .modal.auth-dialog { width: min(760px, 100%); }
 .modal.n8n-export { width: min(820px, 100%); }
+/* 补缺口表单在预览里限高滚动；放在弹窗里时完整显示，保存按钮不被截断 */
+.n8n-export .ep-gaps { max-height: none; }
 .auth-paste { resize: vertical; min-height: 140px; font-family: ui-monospace, monospace; font-size: 12.5px; line-height: 1.5; }
 .n8n-export-json { resize: vertical; min-height: 240px; }
