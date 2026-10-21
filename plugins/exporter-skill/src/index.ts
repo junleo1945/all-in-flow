@@ -11,9 +11,15 @@ import {
 } from "@aif/workflow-ir";
 import { findIntegration, type IntegrationEntry } from "@aif/integrations";
 import { connectionEntries, renderConnections } from "./connections.js";
-import { planScripts, renderEnvExample, type ScriptPlan } from "./scripts.js";
+import { collectSteps, buildFacts, type SkillFacts } from "./facts.js";
+import { planScripts, renderEnvExample, type ScriptPlan, type ScriptPlanResult } from "./scripts.js";
+import { COMPATIBILITY_LIMIT, DESCRIPTION_LIMIT, FIRST_PERSON, describesWhenToUse } from "./validate.js";
+import { SECTION_HEADINGS, SECTION_KEYS, evalsJson, type AuthorDraft } from "./author.js";
 
 export { orderSteps, conditionText } from "@aif/workflow-ir";
+export { buildFacts, collectSteps, unconfirmedPaths, type SkillFacts, type FactStep } from "./facts.js";
+export { validateSkill, describesWhenToUse, type SkillIssue, type ValidateOptions } from "./validate.js";
+export { parseAuthorDraft, evalsJson, SECTION_KEYS, SECTION_HEADINGS, type AuthorDraft, type SectionKey } from "./author.js";
 
 export interface SkillOptions {
   /** 目标 Agent：只影响安装说明，Skill 内容相同 */
@@ -68,8 +74,14 @@ export const skillExporter: ExporterPlugin<SkillOptions> = {
   supports(graph: ExecGraph): ExportIssue[] {
     const ir = graph.ir;
     const issues: ExportIssue[] = [];
-    if (!/时使用|时才使用|时调用/.test(ir.description)) {
-      issues.push({ level: "warning", message: "description 没有写明什么时候使用（应包含「……时使用」），Agent 可能不会自动触发这个 Skill" });
+    if (!describesWhenToUse(ir.description)) {
+      issues.push({ level: "warning", message: "description 没有写明什么时候使用（应包含「……时使用」或 “Use when …”），Agent 可能不会自动触发这个 Skill" });
+    }
+    if (ir.description.length > DESCRIPTION_LIMIT) {
+      issues.push({ level: "warning", message: `description 有 ${ir.description.length} 个字符，超过规范的 ${DESCRIPTION_LIMIT} 个上限，部分 Agent 将无法加载这个 Skill` });
+    }
+    if (FIRST_PERSON.test(ir.description)) {
+      issues.push({ level: "warning", message: "description 应使用第三人称（说明这个 Skill 做什么），不要以「我」「你」开头" });
     }
     const { unsupported } = planScripts(ir, orderSteps(ir).number);
     for (const u of unsupported) {
@@ -105,34 +117,48 @@ export const skillExporter: ExporterPlugin<SkillOptions> = {
   },
 
   compile(graph: ExecGraph, options: SkillOptions): ExportFile[] {
-    const ir = graph.ir;
-    const base = ir.slug;
-    const { plans } = planScripts(ir, orderSteps(ir).number);
-    const files: ExportFile[] = [
-      { path: `SKILL.md`, content: renderSkillMd(ir, plans) },
-      { path: `references/workflow.mmd`, content: toMermaid(ir) },
-      { path: `references/workflow.json`, content: JSON.stringify(ir, null, 2) + "\n" },
-      { path: `INSTALL.md`, content: renderInstall(ir, options, plans) },
-    ];
-    for (const plan of plans.values()) files.push({ path: plan.path, content: plan.content });
-    const env = renderEnvExample(ir);
-    if (env) files.push({ path: `.env.example`, content: env });
-    const mcp = mcpTemplate(ir);
-    if (mcp) files.push({ path: `mcp.json.template`, content: mcp });
-    const connections = renderConnections(ir);
-    if (connections) files.push({ path: `CONNECTIONS.md`, content: connections });
-
-    if (options.packaging === "claude-plugin") {
-      // Claude Code 插件：.claude-plugin/plugin.json + skills/<slug>/...
-      const plugin = { name: base, version: "1.0.0", description: ir.description };
-      return [
-        { path: `${base}/.claude-plugin/plugin.json`, content: JSON.stringify(plugin, null, 2) + "\n" },
-        ...files.map((f) => ({ ...f, path: `${base}/skills/${base}/${f.path}` })),
-      ];
-    }
-    return files.map((f) => ({ ...f, path: `${base}/${f.path}` }));
+    return packageFiles(graph.ir, skeleton(graph.ir, options).files, options);
   },
 };
+
+/** 把根目录下的文件放进 zip 里的目录结构：<slug>/…，或 Claude Code 插件的 <slug>/skills/<slug>/… */
+export function packageFiles(ir: WorkflowIR, files: ExportFile[], options: Pick<SkillOptions, "packaging">): ExportFile[] {
+  const base = ir.slug;
+  if (options.packaging === "claude-plugin") {
+    // Claude Code 插件：.claude-plugin/plugin.json + skills/<slug>/...
+    const plugin = { name: base, version: "1.0.0", description: ir.description };
+    return [
+      { path: `${base}/.claude-plugin/plugin.json`, content: JSON.stringify(plugin, null, 2) + "\n" },
+      ...files.map((f) => ({ ...f, path: `${base}/skills/${base}/${f.path}` })),
+    ];
+  }
+  return files.map((f) => ({ ...f, path: `${base}/${f.path}` }));
+}
+
+/** Skill 根目录下的全部文件（路径相对于根目录，不含 zip 外层目录） */
+export function skeleton(ir: WorkflowIR, options: SkillOptions): { files: ExportFile[] } & ScriptPlanResult {
+  const { plans, unsupported } = planScripts(ir, orderSteps(ir).number);
+  const files: ExportFile[] = [
+    { path: `SKILL.md`, content: renderSkillMd(ir, plans) },
+    { path: `references/workflow.mmd`, content: toMermaid(ir) },
+    { path: `references/workflow.json`, content: JSON.stringify(ir, null, 2) + "\n" },
+    { path: `INSTALL.md`, content: renderInstall(ir, options, plans) },
+  ];
+  for (const plan of plans.values()) files.push({ path: plan.path, content: plan.content });
+  const env = renderEnvExample(ir);
+  if (env) files.push({ path: `.env.example`, content: env });
+  const mcp = mcpTemplate(ir);
+  if (mcp) files.push({ path: `mcp.json.template`, content: mcp });
+  const connections = renderConnections(ir);
+  if (connections) files.push({ path: `CONNECTIONS.md`, content: connections });
+  return { files, plans, unsupported };
+}
+
+/** 给模型和校验器的事实清单。gaps 是导出前仍然空缺的信息 */
+export function skillFacts(ir: WorkflowIR, options: SkillOptions, gaps: string[] = []): SkillFacts {
+  const { files, plans, unsupported } = skeleton(ir, options);
+  return buildFacts(ir, { plans, unsupported, files: files.map((f) => f.path), gaps });
+}
 
 // ——— 渲染 ———
 
@@ -146,23 +172,11 @@ const skillTag = (n: StepNodeType) => (n.executor ? `〔${TAG[n.executor]}〕` :
 
 export function renderSkillMd(ir: WorkflowIR, plans: Map<string, ScriptPlan> = new Map()): string {
   const integrations = ir.integrations;
+  const compat = compatibilityText(ir, plans);
 
-  const frontmatter = [
-    "---",
-    `name: ${ir.slug}`,
-    `description: ${JSON.stringify(ir.description)}`,
-    integrations.length
-      ? `compatibility: ${JSON.stringify(`需要：${integrations.map((i) => i.name).join("、")}`)}`
-      : undefined,
-    "metadata:",
-    `  generated-by: all-in-flow`,
-    `  workflow-version: "${ir.version}"`,
-    "---",
-  ].filter((line): line is string => line !== undefined);
+  const lines: string[] = [...frontmatterLines(ir, ir.description, compat), "", `# ${ir.name}`, ""];
 
-  const lines: string[] = [...frontmatter, "", `# ${ir.name}`, ""];
-
-  lines.push("## 触发方式", "", `${ir.trigger.detail}${ir.trigger.type === "manual" ? "，或用户主动要求时" : ""}。`, "");
+  lines.push("## 触发方式", "", triggerLine(ir), "");
 
   if (integrations.length) {
     lines.push("## 前置条件", "");
@@ -191,15 +205,153 @@ export function renderSkillMd(ir: WorkflowIR, plans: Map<string, ScriptPlan> = n
 
   lines.push("## 流程图", "", "见 `references/workflow.mmd`。", "");
 
-  lines.push("## 执行步骤", "", ...renderSteps(ir, { scripts: plans, tag: skillTag }), "");
+  lines.push("## 执行步骤", "", ...stepLines(ir, plans), "");
+
+  const data = dataReferences(ir);
+  if (data.length) lines.push(...data, "");
 
   lines.push("## 执行约定", "");
-  lines.push("- 标记〔需要确认〕的步骤，必须等用户回复后才能继续。");
-  lines.push("- 任何一步失败时，停下来说明失败原因，不要跳过。");
-  lines.push("- 标记〔脚本〕的步骤优先使用确定性的命令或接口调用，不要凭记忆编造结果。");
+  lines.push("- 标记〔需要确认〕的步骤，等用户明确回复后再继续。这类步骤需要用户本人判断或操作，替用户回答会让结果不可信。");
+  lines.push("- 任何一步失败时，停下来说明失败原因，不要跳过。后面的步骤依赖前面的输出，跳过会让结果悄悄出错。");
+  lines.push(
+    `- 标记〔脚本〕的步骤，运行对应的脚本${connectionEntries(ir).length ? "，或按 `CONNECTIONS.md` 调用" : ""}，不要凭记忆编造结果。编造的数据看上去正常，却无法核对。`,
+  );
+  lines.push("- 脚本打印到标准输出的内容就是该步骤的输出。按步骤里「输出」列出的变量名记住它，后面的步骤要用时直接取。");
+  if (ir.inputs.length) lines.push("- 「输入」里列出的信息缺失时，先向用户索取，不要自行猜测。");
   lines.push("");
 
   return lines.join("\n");
+}
+
+/** SKILL.md 的 frontmatter。name 固定为 slug，description 由调用方给（模型撰写时用它自己的） */
+function frontmatterLines(ir: WorkflowIR, description: string, compat: string | undefined): string[] {
+  return [
+    "---",
+    `name: ${ir.slug}`,
+    `description: ${JSON.stringify(description)}`,
+    compat ? `compatibility: ${JSON.stringify(compat)}` : undefined,
+    "metadata:",
+    `  generated-by: all-in-flow`,
+    `  workflow-version: "${ir.version}"`,
+    "---",
+  ].filter((line): line is string => line !== undefined);
+}
+
+/** 触发方式一句话。手动触发的说明里已经写了“用户要求”时不再重复补一句 */
+function triggerLine(ir: WorkflowIR): string {
+  const manualHint = ir.trigger.type === "manual" && !/主动|要求|手动/.test(ir.trigger.detail);
+  return `${ir.trigger.detail.replace(/[。.]$/, "")}${manualHint ? "，或用户主动要求时" : ""}。`;
+}
+
+/**
+ * 用模型撰写的草稿拼出完整的 Skill（路径相对于根目录）：骨架文件不变，SKILL.md 按固定顺序重新拼装，
+ * 另外加入模型新增的 references、evals/evals.json，以及 INSTALL.md 末尾的迭代说明。
+ */
+export function assembleSkill(ir: WorkflowIR, options: SkillOptions, draft: AuthorDraft): { files: ExportFile[] } & ScriptPlanResult {
+  const base = skeleton(ir, options);
+  const { plans } = base;
+  const text = (key: (typeof SECTION_KEYS)[number]) => draft.sections[key];
+  const section = (key: (typeof SECTION_KEYS)[number]): string[] => (text(key) ? [`## ${SECTION_HEADINGS[key]}`, "", text(key), ""] : []);
+
+  const data = dataReferences(ir);
+  const md = [
+    ...frontmatterLines(ir, draft.description, compatibilityText(ir, plans)),
+    "",
+    `# ${ir.name}`,
+    "",
+    ...section("overview"),
+    "## 触发方式",
+    "",
+    triggerLine(ir),
+    "",
+    ...section("prerequisites"),
+    ...section("inputs"),
+    "## 流程图",
+    "",
+    "见 `references/workflow.mmd`。",
+    "",
+    ...section("steps"),
+    ...(data.length ? [...data, ""] : []),
+    ...section("output"),
+    ...section("edgeCases"),
+    ...section("conventions"),
+  ].join("\n");
+
+  const files = base.files.map((f) => {
+    if (f.path === "SKILL.md") return { ...f, content: md };
+    if (f.path === "INSTALL.md") return { ...f, content: `${String(f.content).replace(/\s+$/, "")}\n\n${ITERATE_HINT}\n` };
+    return f;
+  });
+  files.push(...draft.references.map((r) => ({ path: r.path, content: r.content.endsWith("\n") ? r.content : `${r.content}\n` })));
+  files.push({ path: "evals/evals.json", content: evalsJson(ir.slug, draft) });
+  return { ...base, files };
+}
+
+const ITERATE_HINT = [
+  "## 继续打磨这个 Skill",
+  "",
+  "`evals/evals.json` 里有 3 条测试提示。想让它更好用，在装有 skill-creator 的 Agent 里打开本目录，说「评测并改进这个 skill」，",
+  "它会用这些提示各跑一轮，对比结果并给出修改建议。",
+].join("\n");
+
+/** 执行步骤的每一行。foreach 的子流程展开成 3.1、3.2……，子流程里的结束语只针对本轮 */
+function stepLines(ir: WorkflowIR, plans: Map<string, ScriptPlan>, prefix = ""): string[] {
+  return renderSteps(ir, {
+    prefix,
+    scripts: plans,
+    tag: skillTag,
+    endLabels: prefix ? { branch: "本项结束", finish: "本项完成，继续循环中的下一项" } : undefined,
+    foreach: (n, label) => ({
+      text: `对 \`${n.over}\` 中的每一项（当前项记为 \`${n.item}\`）依次执行下面的子步骤`,
+      lines: stepLines({ ...ir, nodes: n.body.nodes, edges: n.body.edges }, plans, `${label}.`).map((l) => `   ${l}`),
+    }),
+  });
+}
+
+/**
+ * 「{{n1.orders}}」里的 n1 是节点 id，步骤列表里看不到它，所以单独说明 id 与步骤编号的对应关系，
+ * 否则 Agent 无法知道参数该取哪一步的输出。
+ */
+function dataReferences(ir: WorkflowIR): string[] {
+  const all = collectSteps(ir);
+  const producers = all.filter(({ node }) => (node.type === "step" || node.type === "foreach") && !!node.outputs?.length);
+  const loop = all.find(({ node }) => node.type === "foreach")?.node;
+  if (!producers.length && !loop) return [];
+  const lines = ["## 数据引用", "", "步骤和脚本参数里的 `{{…}}` 是对数据的引用："];
+  if (ir.inputs.length) lines.push("- `{{input.名字}}`：工作流输入，见「输入」。");
+  if (producers.length) {
+    lines.push("- `{{步骤id.变量名}}`：某个步骤输出的变量。步骤 id 对应的步骤：");
+    for (const { node, number } of producers) lines.push(`  - \`${node.id}\` → 第 ${number} 步「${node.title}」`);
+  }
+  if (loop?.type === "foreach") {
+    lines.push(`- \`{{${loop.item}.字段}}\`：循环子步骤里，\`${loop.item}\` 是当前正在处理的那一项，\`{{${loop.item}.字段}}\` 取它的某个字段。`);
+  }
+  return lines;
+}
+
+/**
+ * compatibility 写运行环境要求（规范里这一栏的含义），不是依赖的业务系统清单：
+ * 脚本需要的解释器、命令行工具、MCP 服务，以及需要联网访问的系统。没有任何要求时不写这一栏。
+ */
+export function compatibilityText(ir: WorkflowIR, plans: Map<string, ScriptPlan> = new Map()): string | undefined {
+  const paths = [...plans.values()].map((p) => p.path);
+  const need: string[] = [];
+  if (paths.some((p) => p.endsWith(".sh"))) need.push("bash");
+  if ([...plans.values()].some((p) => p.content.includes("curl "))) need.push("curl");
+  if (paths.some((p) => p.endsWith(".mjs"))) need.push("Node.js 20 及以上");
+  if (paths.some((p) => p.endsWith(".py"))) need.push("python3");
+  const reach: string[] = [];
+  for (const i of ir.integrations) {
+    const entry = findIntegration(i.id);
+    const access = entry?.access ?? i.access;
+    if (access === "cli" && entry?.cli) need.push(`${entry.cli.command} 命令行工具`);
+    else if (access === "mcp") need.push(`MCP 服务「${i.name}」`);
+    else if (access !== "manual") reach.push(i.name);
+  }
+  if (reach.length) need.push(`能访问 ${reach.join("、")}`);
+  if (!need.length) return undefined;
+  const text = `需要：${need.join("、")}`;
+  return text.length > COMPATIBILITY_LIMIT ? `${text.slice(0, COMPATIBILITY_LIMIT - 1)}…` : text;
 }
 
 /**

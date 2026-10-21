@@ -75,7 +75,8 @@ describe("Agent Skill 导出", () => {
 
   it("前置条件写入 compatibility 与正文", () => {
     const md = renderSkillMd(salesReport);
-    expect(md).toMatch(/^compatibility: "需要：ERP"$/m);
+    // compatibility 写运行环境要求（规范里这一栏的含义），不是业务系统清单
+    expect(md).toMatch(/^compatibility: "需要：能访问 ERP"$/m);
     expect(md).toMatch(/## 前置条件[\s\S]*ERP 订单：通过 ERP 接口拉取订单数据。需要在本地配置 `ERP_BASE_URL`、`ERP_TOKEN`/);
   });
 

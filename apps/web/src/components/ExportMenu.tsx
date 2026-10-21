@@ -2,10 +2,10 @@ import { useState } from "react";
 import type { WorkflowIR } from "@aif/workflow-ir";
 import type { Scene } from "../lib/canvas";
 import * as ex from "../lib/exporters";
-import { ExportPreview, type ExportPreviewSpec } from "./ExportPreview";
 import { PromptExportPreview } from "./PromptExportPreview";
 import { AuthorizationsDialog } from "./AuthorizationsDialog";
 import { N8nExportDialog } from "./N8nExportDialog";
+import { SkillExportDialog } from "./SkillExportDialog";
 import { tr, useI18n } from "../i18n";
 
 export interface ExporterInfo { id: string; name: string; description: string; version: string }
@@ -31,7 +31,7 @@ export function ExportMenu({
   const { t } = useI18n();
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string; extra?: string[] } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [preview, setPreview] = useState<ExportPreviewSpec | null>(null);
+  const [skillOpen, setSkillOpen] = useState(false);
   const [promptOpen, setPromptOpen] = useState(false);
   const [n8nOpen, setN8nOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
@@ -54,7 +54,7 @@ export function ExportMenu({
 
   return (
     <>
-      <div className="card menu" role="menu" style={n8nOpen || authOpen ? { display: "none" } : undefined} onMouseLeave={() => undefined}>
+      <div className="card menu" role="menu" style={n8nOpen || authOpen || skillOpen ? { display: "none" } : undefined} onMouseLeave={() => undefined}>
         <div className="grp">{t("exp.grpImages")}<span>{t("exp.builtin")}</span></div>
         <div className="quick">
           <button className="q" disabled={!scene || busy} onClick={() => run(async () => ex.download(await ex.exportPng(scene!), `${base}.png`))}>
@@ -76,16 +76,7 @@ export function ExportMenu({
             <div className="grp">{t("exp.grpPlatform")}<span>{t("exp.plugin")}</span></div>
             {hasSkill && (
               <>
-                <button className="mi" disabled={busy} onClick={() => run(async () => {
-                  const s = await ex.buildSkill(ir, { target: "generic", packaging: "zip" });
-                  setPreview({
-                    title: t("exp.skillPreview"),
-                    files: s.files,
-                    notes: [...s.requirements.map((q) => t("exp.reqRun", { q })), ...s.warnings.map((w) => t("exp.warn", { w }))],
-                    downloadLabel: t("exp.downloadZip"),
-                    onDownload: async () => ex.download(await ex.zipFiles(s.files), s.filename),
-                  });
-                })}>
+                <button className="mi" disabled={busy} onClick={() => setSkillOpen(true)}>
                   <div className="ic">SK</div>
                   <div><b>Agent Skill</b><span>{t("exp.skillDesc")}</span></div>
                   <span className="badge">{t("exp.plugin")}</span>
@@ -153,11 +144,14 @@ export function ExportMenu({
           }}
         />
       )}
-      {preview && (
-        <ExportPreview
-          spec={preview}
+      {skillOpen && (
+        <SkillExportDialog
+          ir={ir}
+          workflowId={workflowId}
+          version={version}
+          onSaved={onSaved}
           onClose={() => {
-            setPreview(null);
+            setSkillOpen(false);
             onClose();
           }}
         />
