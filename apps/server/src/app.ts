@@ -9,6 +9,8 @@ import { workflowRoutes } from "./routes/workflows.js";
 import { authorizationRoutes } from "./routes/authorizations.js";
 import { n8nExportRoutes } from "./routes/n8nExport.js";
 import type { N8nExporter } from "./n8n/exportAgent.js";
+import { skillExportRoutes } from "./routes/skillExport.js";
+import type { SkillAuthor } from "./skill/authorAgent.js";
 import type { McpDeps } from "./n8n/mcp.js";
 import { shareRoutes } from "./routes/shares.js";
 import { adminRoutes } from "./routes/admin.js";
@@ -32,6 +34,8 @@ export interface AppDeps {
   exporters?: ExporterPlugin<any>[];
   /** 导出 n8n 工作流的 skill（未配置时导出接口返回 503） */
   n8nExporter?: N8nExporter;
+  /** 用模型撰写 Agent Skill（未配置时导出接口返回 503，前端改用浏览器内的基础导出） */
+  skillAuthor?: SkillAuthor;
   /** 访问用户 n8n 的 MCP 服务时使用的依赖（测试中替换 fetch 与域名解析） */
   n8nMcp?: McpDeps;
   registry: ConversationRouteDeps["registry"];
@@ -76,6 +80,7 @@ export function createApp(deps: AppDeps) {
   app.use("/api/authorizations/*", authed);
   app.route("/api/authorizations", authorizationRoutes({ db: deps.db, secretKey: deps.config.authSecretKey, limiter: new Limiter(10, 60_000), mcp: { ...deps.n8nMcp, allowPrivateHosts: deps.config.allowPrivateHosts } }));
   app.route("/api/workflows", n8nExportRoutes({ db: deps.db, config: deps.config, exporter: deps.n8nExporter, limiter: new Limiter(3, 60_000), mcp: deps.n8nMcp }));
+  app.route("/api/workflows", skillExportRoutes({ db: deps.db, config: deps.config, author: deps.skillAuthor, limiter: new Limiter(3, 60_000) }));
   app.use("/api/shares", authed);
   app.use("/api/shares/*", authed);
   app.route("/api", shareRoutes(deps));

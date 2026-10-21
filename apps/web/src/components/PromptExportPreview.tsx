@@ -3,6 +3,7 @@ import type { WorkflowIR } from "@aif/workflow-ir";
 import { api } from "../lib/api";
 import * as ex from "../lib/exporters";
 import { ExportPreview, type PreviewFile } from "./ExportPreview";
+import { GapsForm } from "./GapsForm";
 import { useI18n } from "../i18n";
 
 /**
@@ -72,38 +73,18 @@ export function PromptExportPreview({
     }
   };
 
-  const form =
-    gaps.length > 0 || msg ? (
-      <section className="ep-gaps" aria-label={t("exp.gapsLabel")}>
-        {gaps.length > 0 && (
-          <>
-            <div className="ep-gaps-h">
-              <b>{t("exp.gapsTitle")}</b>
-              <span className="muted">{t("exp.gapsHint")}</span>
-            </div>
-            {gaps.map((g) => (
-              <label key={g.nodeId} className="ep-gap">
-                <span>{g.question}</span>
-                <textarea
-                  rows={2}
-                  value={answers[g.nodeId] ?? ""}
-                  placeholder={g.kind === "criteria" ? t("exp.phCriteria") : t("exp.phTemplate")}
-                  onChange={(e) => setAnswers((a) => ({ ...a, [g.nodeId]: e.target.value }))}
-                />
-              </label>
-            ))}
-            {workflowId && (
-              <div className="ep-gap-actions">
-                <button className="btn btn-line" disabled={!filled || saving} onClick={save}>
-                  {saving ? t("exp.saving") : t("exp.saveNew")}
-                </button>
-              </div>
-            )}
-          </>
-        )}
-        {msg && <div className={msg.kind === "err" ? "notice-error" : "muted"}>{msg.text}</div>}
-      </section>
-    ) : null;
+  const form = (
+    <GapsForm
+      gaps={gaps}
+      answers={answers}
+      onChange={(id, v) => setAnswers((a) => ({ ...a, [id]: v }))}
+      hint={t("exp.gapsHint")}
+      onSave={workflowId ? save : undefined}
+      canSave={filled}
+      saving={saving}
+      msg={msg}
+    />
+  );
 
   return (
     <ExportPreview

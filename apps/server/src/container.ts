@@ -9,6 +9,7 @@ import { createVisionService } from "./attachments/vision.js";
 import { createAttachmentService } from "./attachments/service.js";
 import { createIrGenerator } from "./agent/irGenerator.js";
 import { createN8nExporter } from "./n8n/exportAgent.js";
+import { createSkillAuthor } from "./skill/authorAgent.js";
 import { createSessionRegistry } from "./agent/registry.js";
 import { createApp } from "./app.js";
 import { skillExporter } from "@aif/plugin-exporter-skill";
@@ -35,6 +36,8 @@ export async function buildContainer(config: AppConfig, overrides: { agentModel?
 
   const generateIr = createIrGenerator({ runtime, model: workflowModel });
   const n8nExporter = createN8nExporter({ runtime, model: workflowModel });
+  // 没有配置模型密钥时不开放：导出接口返回 503，前端改用浏览器内的基础导出
+  const skillAuthor = config.deepseekApiKey || overrides.runtime ? createSkillAuthor({ runtime, model: workflowModel }) : undefined;
   // 图片识别（千问，走和 DeepSeek 相同的代理）：配置了 VISION_MODEL_ID 才开启
   // 图片存储始终可用（关闭识别后，已上传的图片仍能查看）；识别只在配置了模型时启用
   const visionEnabled = !!config.visionModelId;
@@ -78,6 +81,7 @@ export async function buildContainer(config: AppConfig, overrides: { agentModel?
     config,
     exporters: ALL_EXPORTERS,
     n8nExporter,
+    skillAuthor,
   });
 
   return { app, db, sql, registry, auth };
