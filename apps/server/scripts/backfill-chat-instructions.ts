@@ -1,6 +1,9 @@
 /**
- * 给已有工作流补写 chatInstructions（聊天场景下给用户看的操作说明），保存为新版本。
- * 只处理每个工作流的最新版本，已经有说明的步骤不会改动。默认只预览，加 --apply 才写入。
+ * 给已有工作流补写聊天场景需要的两类说明，保存为新版本：
+ *   1. chatInstructions：程序化步骤「在哪个系统做什么」的操作说明；
+ *   2. 循环项的字段说明（Variable.fields）：把「当前这一项的 name」写成「候选人姓名」。
+ * 这两个字段是后加的，导出对话提示词前创建的工作流都没有。
+ * 只处理每个工作流的最新版本，已经有说明的内容不会改动，可以重复运行。默认只预览，加 --apply 才写入。
  * 用法：
  *   DATABASE_URL=... DEEPSEEK_API_KEY=... DEEPSEEK_BASE_URL=... \
  *     pnpm --filter @aif/server exec tsx scripts/backfill-chat-instructions.ts [--apply] [--user <用户 id>]
@@ -12,7 +15,7 @@ import { createDb } from "../src/db/client.js";
 import { workflows, workflowVersions } from "../src/db/schema/index.js";
 import { addVersion } from "../src/db/repos/workflowRepo.js";
 import { createRuntime, resolveModel } from "../src/agent/models.js";
-import { backfillChatInstructions, createAsk, missingChatSteps } from "../src/agent/chatBackfill.js";
+import { backfillChatInstructions, backfillItemFields, createAsk, listItemFields, missingChatSteps, missingItemFields } from "../src/agent/chatBackfill.js";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL 未配置");
@@ -38,16 +41,22 @@ for (const wf of rows) {
   if (!row) continue;
   const ir = migrateIr(row.ir);
   const missing = missingChatSteps(ir).length;
-  if (missing === 0) continue;
+  const missingFields = missingItemFields(ir).reduce((s, m) => s + m.fields.length, 0);
+  if (missing === 0 && missingFields === 0) continue;
 
-  const { ir: next, filled } = await backfillChatInstructions(ir, ask);
+  const step1 = await backfillChatInstructions(ir, ask);
+  const step2 = await backfillItemFields(step1.ir, ask);
+  const next = step2.ir;
+  const filled = step1.filled + step2.filled;
   const check = validateWorkflow(next);
   if (filled === 0 || !check.ok) {
-    console.log(`跳过 ${wf.id}「${wf.name}」：缺 ${missing} 步，补写 ${filled} 步${check.ok ? "" : "，校验未通过"}`);
+    console.log(`跳过 ${wf.id}「${wf.name}」：缺 ${missing} 步说明、${missingFields} 个字段说明，补写 ${step1.filled} 步、${step2.filled} 个字段${check.ok ? "" : "，校验未通过"}`);
     continue;
   }
-  console.log(`${apply ? "写入" : "预览"} ${wf.id}「${wf.name}」v${wf.latestVersion}：补写 ${filled}/${missing} 步`);
+  console.log(`${apply ? "写入" : "预览"} ${wf.id}「${wf.name}」v${wf.latestVersion}：补写 ${step1.filled}/${missing} 步说明、${step2.filled}/${missingFields} 个字段说明`);
   for (const n of next.nodes) if (n.type === "step" && n.chatInstructions && !(ir.nodes.find((o) => o.id === n.id) as any)?.chatInstructions) console.log(`  - ${n.title}：${n.chatInstructions}`);
+  const before = new Set(listItemFields(ir));
+  for (const line of listItemFields(next)) if (!before.has(line)) console.log(`  - ${line}`);
   if (apply) {
     const v = await addVersion(db, wf.userId, wf.id, check.ir);
     console.log(`  已保存为 v${v}`);

@@ -3,7 +3,7 @@ import { checkExport, lower, toMermaid, type ExportFile, type ExportIssue, type 
 import { tr } from "../i18n";
 import { skillExporter, type SkillOptions } from "@aif/plugin-exporter-skill";
 import { promptExporter } from "@aif/plugin-exporter-prompt";
-export { applyPromptAnswers, promptGaps, type PromptGap } from "@aif/plugin-exporter-prompt";
+export { applyPromptAnswers, promptGaps, promptPrep, type PromptGap, type PromptPrep } from "@aif/plugin-exporter-prompt";
 import { exportToBlob, exportToSvg, serializeAsJSON } from "@excalidraw/excalidraw";
 import type { Scene } from "./canvas";
 

@@ -16,7 +16,7 @@ export function buildIrSystemPrompt(): string {
 - step：必须有 executor、instructions（具体怎么做），以及 action（结构化的执行方式）；可以用 outputs 声明输出变量。
 - step 的 chatInstructions（可选）：当 executor 为 deterministic（调用接口、拉取数据等程序化步骤）时必须填写。这是在普通聊天窗口里让用户亲手完成这一步的说明，用用户看得懂的话写出「在哪个系统的哪个页面做什么」，例如「在 ERP 的订单查询里，把下单时间设为本周一 00:00 到现在，导出订单列表」。不要出现接口、API、字段、参数、调用等技术用语，也不要使用 {{}} 引用。其他 executor 不需要填写。
 - decision：mode 为 "expr" 时，每条出边都要有 label，并带 condition（left 为引用，op 为 eq/ne/gt/gte/lt/lte/contains/not_contains/empty/not_empty/is_true/is_false 之一，right 为常量），最后一条出边用 default: true 表示"其他情况"；mode 为 "llm" 时必须有 question（判断问题），input 可选（引用的内容）。判断依据能写成条件就用 expr，需要理解内容才能判断就用 llm。
-- foreach：对数组逐项执行子流程。over 是引用（如 "n1.orders"），必须指向 array 类型的变量；item 是当前元素的名字；body 是子流程，自带 start 和 end；outputs 可选。子流程内可以用 item 名引用当前元素（如 "order.id"）。
+- foreach：对数组逐项执行子流程。over 是引用（如 "n1.orders"），必须指向 array 类型的变量；item 是当前元素的名字；body 是子流程，自带 start 和 end；outputs 可选。子流程内可以用 item 名引用当前元素（如 "order.id"）。over 指向的变量如果每一项是对象，必须在该变量上用 fields 列出子流程里用到的每个字段：name 是字段名，description 是用户看得懂的中文说明，例如 {"name":"orders","type":"array","items":"object","description":"订单列表","fields":[{"name":"id","description":"订单号"},{"name":"amount","description":"订单金额"}]}。
 - merge：并行分支汇合。只有方案明确需要并行时才使用。
 - 循环只能经过 decision 节点作为出口，没有 decision 的循环不合法。
 
