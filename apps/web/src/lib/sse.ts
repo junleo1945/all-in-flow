@@ -1,4 +1,4 @@
-import { ApiError, AUTH_EXPIRED_CODE, redirectToLogin } from "./api";
+import { ApiError, AUTH_EXPIRED_CODE, isSessionExpired, redirectToLogin } from "./api";
 import { currentLocale, tr } from "../i18n";
 
 export interface SseEvent {
@@ -52,7 +52,7 @@ export async function sendMessage(
   });
   if (!res.ok || !res.body) {
     const body = await res.json().catch(() => null);
-    if (res.status === 401 || body?.code === AUTH_EXPIRED_CODE) {
+    if (isSessionExpired(res.status, body)) {
       redirectToLogin();
       throw new ApiError(AUTH_EXPIRED_CODE, body?.message || tr("common.relogin"), res.status);
     }

@@ -5,13 +5,14 @@ import { home } from "./messages/home";
 import { workspace } from "./messages/workspace";
 import { exporters } from "./messages/exporters";
 import { shell } from "./messages/shell";
+import { authorizations } from "./messages/authorizations";
 
 export type Locale = "zh" | "en";
 
 /** 每个文件一个词条集合，key 用「区域.名称」命名，zh 为源文案，en 必须有同样的 key */
 export type Messages = { zh: Record<string, string>; en: Record<string, string> };
 
-const AREAS: Messages[] = [common, login, home, workspace, exporters, shell];
+const AREAS: Messages[] = [common, login, home, workspace, exporters, shell, authorizations];
 const ZH: Record<string, string> = Object.assign({}, ...AREAS.map((a) => a.zh));
 const EN: Record<string, string> = Object.assign({}, ...AREAS.map((a) => a.en));
 

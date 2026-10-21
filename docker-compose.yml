@@ -53,6 +53,9 @@ services:
       DAILY_TOKEN_QUOTA_PER_USER: ${DAILY_TOKEN_QUOTA_PER_USER:-2000000}
       DAILY_COST_LIMIT_USD: ${DAILY_COST_LIMIT_USD:-20}
       MAX_TURNS_PER_CONVERSATION: ${MAX_TURNS_PER_CONVERSATION:-80}
+      # 授权管理（导出 n8n）：加密密钥与是否允许内网地址，见 .env.example
+      AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:-}
+      MCP_ALLOW_PRIVATE_HOSTS: ${MCP_ALLOW_PRIVATE_HOSTS:-false}
     volumes:
       # 自定义模型清单（只读挂载），修改后重启服务端生效
       - ./config/models.json:/app/config/models.json:ro

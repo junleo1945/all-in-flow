@@ -489,3 +489,37 @@ table.tasks { width: 100%; border-collapse: collapse; font-size: 13px; }
 .mmd-input::-webkit-scrollbar-track { background: transparent; }
 .mmd-input::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; border: 2px solid var(--sheet); }
 .mmd-input::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
+
+/* 授权管理与导出 n8n 的弹窗 */
+.auth-list { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 8px; }
+.auth-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--sheet-2); }
+.auth-main { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.auth-main .muted { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auth-actions { display: flex; gap: 8px; flex: none; justify-content: flex-end; }
+.auth-form { display: grid; gap: 12px; margin-top: 14px; }
+.n8n-field { display: grid; gap: 6px; font-size: 13px; }
+.n8n-field > span { color: var(--ink-2); font-weight: 600; }
+.n8n-export h3 { margin: 14px 0 4px; font-size: 14px; }
+.n8n-export ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13.5px; }
+.n8n-export-start { display: grid; gap: 12px; margin-top: 10px; }
+.n8n-export-empty { display: grid; gap: 12px; margin-top: 10px; justify-items: start; }
+.n8n-export-steps { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 8px; counter-reset: s; }
+.n8n-export-steps li { padding-left: 26px; position: relative; color: var(--ink-3); font-size: 14px; }
+.n8n-export-steps li::before { content: "○"; position: absolute; left: 4px; }
+.n8n-export-steps li.now { color: var(--ink); font-weight: 600; }
+.n8n-export-steps li.now::before { content: "◔"; }
+.n8n-export-steps li.done { color: var(--ok); }
+.n8n-export-steps li.done::before { content: "✓"; }
+.n8n-export-result { display: grid; gap: 8px; margin-top: 10px; }
+.n8n-export-json { width: 100%; font-family: ui-monospace, monospace; font-size: 12px; margin-top: 6px; }
+.n8n-export-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.auth-dialog .input, .n8n-export .input { width: 100%; box-sizing: border-box; }
+.auth-form, .n8n-field { min-width: 0; }
+.n8n-field small { line-height: 1.5; overflow-wrap: anywhere; }
+.n8n-field { grid-template-columns: minmax(0, 1fr); }
+.n8n-field small { white-space: normal; }
+.auth-dialog, .n8n-export { white-space: normal; }
+.modal.auth-dialog { width: min(760px, 100%); }
+.modal.n8n-export { width: min(820px, 100%); }
+.auth-paste { resize: vertical; min-height: 140px; font-family: ui-monospace, monospace; font-size: 12.5px; line-height: 1.5; }
+.n8n-export-json { resize: vertical; min-height: 240px; }

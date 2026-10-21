@@ -4,7 +4,6 @@ import { tr } from "../i18n";
 import { skillExporter, type SkillOptions } from "@aif/plugin-exporter-skill";
 import { promptExporter } from "@aif/plugin-exporter-prompt";
 export { applyPromptAnswers, promptGaps, type PromptGap } from "@aif/plugin-exporter-prompt";
-import { n8nExporter, type N8nOptions } from "@aif/plugin-exporter-n8n";
 import { exportToBlob, exportToSvg, serializeAsJSON } from "@excalidraw/excalidraw";
 import type { Scene } from "./canvas";
 
@@ -80,21 +79,6 @@ export async function zipFiles(files: ExportFile[]): Promise<Blob> {
   const zip = new JSZip();
   for (const f of files) zip.file(f.path, f.content);
   return zip.generateAsync({ type: "blob" });
-}
-
-/**
- * 导出为 n8n 工作流 JSON（<slug>.n8n.json）。有 error 级别的问题时拒绝导出。
- * 警告和导入前需要的条件一并返回，导出后展示给用户。
- */
-export async function exportN8nJson(ir: WorkflowIR, options: N8nOptions = n8nExporter.defaultOptions) {
-  const graph = lower(ir);
-  const issues = checkExport(n8nExporter, graph);
-  const errors = issues.filter((i) => i.level === "error");
-  if (errors.length) throw new Error(errors.map(issueText).join("；"));
-
-  const [file] = (await n8nExporter.compile(graph, options)) as ExportFile[];
-  const blob = new Blob([file!.content as string], { type: "application/json" });
-  return { blob, filename: file!.path, warnings: issues.map(issueText), requirements: n8nExporter.requirements(graph) };
 }
 
 /**

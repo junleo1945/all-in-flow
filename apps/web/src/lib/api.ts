@@ -19,6 +19,16 @@ export class ApiError extends Error {
 
 export const AUTH_EXPIRED_CODE = 40001;
 
+/**
+ * 响应是否表示平台自己的登录会话失效。
+ * 判断依据是响应体里的错误码；没有可识别的响应体（如网关直接返回 401）时才退回看状态码。
+ * 其他接口可以放心返回 401（例如 n8n 拒绝了 API Key），不会被误判为登录失效。
+ */
+export function isSessionExpired(status: number, body: { code?: unknown } | null): boolean {
+  if (body?.code === AUTH_EXPIRED_CODE) return true;
+  return status === 401 && typeof body?.code !== "number";
+}
+
 /** 会话失效时跳转登录页，并带上回跳地址 */
 export function redirectToLogin() {
   if (typeof window === "undefined") return;
@@ -32,7 +42,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   const res = await fetch(`/api${path}`, { credentials: "include", ...init, headers: { ...headers, ...(init.headers as Record<string, string>) } });
   const body = (await res.json().catch(() => null)) as Envelope<T> | null;
 
-  if (res.status === 401 || body?.code === AUTH_EXPIRED_CODE) {
+  if (isSessionExpired(res.status, body)) {
     // 登录和退出本身不需要跳转：登录失败要留在页面上提示，退出后本来就去登录页
     if (path !== "/user/login" && path !== "/user/logout") redirectToLogin();
     throw new ApiError(AUTH_EXPIRED_CODE, body?.message || tr("common.authFailed"), res.status);

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { formatTokens, useMe } from "../lib/useMe";
 import { useI18n } from "../i18n";
+import { AuthorizationsDialog } from "./AuthorizationsDialog";
 
 export function BrandMark({ size = 22 }: { size?: number }) {
   return (
@@ -51,6 +52,7 @@ export function Topbar({ children, showUser = true }: { children?: ReactNode; sh
 /** 头像菜单：左键或右键点击头像和用户名弹出，放与访谈无关的工具入口 */
 export function UserMenu({ name }: { name: string }) {
   const [open, setOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
   const { t, locale, setLocale } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -96,9 +98,11 @@ export function UserMenu({ name }: { name: string }) {
         <div className="pop-menu" role="menu">
           <button type="button" role="menuitem" onClick={() => go("/mermaid")}>{t("shell.mermaidPreview")}</button>
           <button type="button" role="menuitem" onClick={() => go("/integrations")}>{t("shell.integrations")}</button>
+          <button type="button" role="menuitem" onClick={() => { setOpen(false); setAuthOpen(true); }}>{t("shell.authorizations")}</button>
           <button type="button" role="menuitem" onClick={() => { setOpen(false); setLocale(locale === "zh" ? "en" : "zh"); }}>{t("shell.language")}</button>
         </div>
       )}
+      {authOpen && <AuthorizationsDialog onClose={() => setAuthOpen(false)} />}
     </div>
   );
 }

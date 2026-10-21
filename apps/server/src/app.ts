@@ -6,6 +6,10 @@ import type { AppVariables } from "./http/context.js";
 import { userRoutes } from "./routes/user.js";
 import { conversationRoutes, type ConversationRouteDeps } from "./routes/conversations.js";
 import { workflowRoutes } from "./routes/workflows.js";
+import { authorizationRoutes } from "./routes/authorizations.js";
+import { n8nExportRoutes } from "./routes/n8nExport.js";
+import type { N8nExporter } from "./n8n/exportAgent.js";
+import type { McpDeps } from "./n8n/mcp.js";
 import { shareRoutes } from "./routes/shares.js";
 import { adminRoutes } from "./routes/admin.js";
 import { exporterRoutes } from "./routes/exporters.js";
@@ -26,11 +30,23 @@ export interface AppDeps {
   cookieDomain?: string;
   db: Db;
   exporters?: ExporterPlugin<any>[];
+  /** 导出 n8n 工作流的 skill（未配置时导出接口返回 503） */
+  n8nExporter?: N8nExporter;
+  /** 访问用户 n8n 的 MCP 服务时使用的依赖（测试中替换 fetch 与域名解析） */
+  n8nMcp?: McpDeps;
   registry: ConversationRouteDeps["registry"];
   attachments?: AttachmentService;
   /** 图片识别是否开启（图片存储与查看不受影响） */
   visionEnabled?: boolean;
-  config: ConversationRouteDeps["config"] & { sharePublicEnabled: boolean; publicBaseUrl: string; dailyCostLimitUsd: number };
+  config: ConversationRouteDeps["config"] & {
+    sharePublicEnabled: boolean;
+    publicBaseUrl: string;
+    dailyCostLimitUsd: number;
+    /** 授权信息的加密密钥；没有时授权管理与 n8n 导出关闭 */
+    authSecretKey?: Buffer;
+    /** 允许授权的地址指向内网（仅内部部署） */
+    allowPrivateHosts?: boolean;
+  };
 }
 
 export function createApp(deps: AppDeps) {
@@ -56,6 +72,10 @@ export function createApp(deps: AppDeps) {
   app.route("/api/integrations", integrationRoutes({ limiter: new Limiter(10, 60_000) }));
   app.use("/api/workflows/*", authed);
   app.route("/api/workflows", workflowRoutes(deps));
+  app.use("/api/authorizations", authed);
+  app.use("/api/authorizations/*", authed);
+  app.route("/api/authorizations", authorizationRoutes({ db: deps.db, secretKey: deps.config.authSecretKey, limiter: new Limiter(10, 60_000), mcp: { ...deps.n8nMcp, allowPrivateHosts: deps.config.allowPrivateHosts } }));
+  app.route("/api/workflows", n8nExportRoutes({ db: deps.db, config: deps.config, exporter: deps.n8nExporter, limiter: new Limiter(3, 60_000), mcp: deps.n8nMcp }));
   app.use("/api/shares", authed);
   app.use("/api/shares/*", authed);
   app.route("/api", shareRoutes(deps));

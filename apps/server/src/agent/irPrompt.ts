@@ -40,16 +40,26 @@ export function buildIrSystemPrompt(catalog: IntegrationEntry[] = INTEGRATION_CA
 - 循环只能经过 decision 节点作为出口，没有 decision 的循环不合法。
 
 ## executor 与 action 的对应（必须一致）
-- deterministic 只能用：integration（调用下面清单中的操作）、transform（整理数据，模板写法）、http（仅当方案给出了明确的接口地址）。
+- deterministic 只能用：integration（调用下面清单中的操作）、transform（只用于字段拼接，见下）、http（仅当方案给出了明确的接口地址）、code（数据处理，见下）。
 - llm 只能用：llm（prompt 写清楚要生成或判断什么，prompt 里可以引用数据）。
 - human 只能用：human（message 写清楚要用户确认或提供什么；approval 为 true 表示只需要同意或拒绝）。
-- 不要使用 code action，除非方案明确要求。
+- 数据整理要写成能直接执行的形式，导出时不会再有人替你补全：
+  - 只是把几个字段拼成一句话，用 transform，template 写成 "订单 {{n1.id}} 金额 {{n1.amount}}" 这样的字段拼接，不要在里面写句子或指令。
+  - 需要筛选、汇总、计算、格式转换、去重、排序等处理，用 code action：{"kind":"code","language":"javascript","source":"…"}，executor 为 deterministic。不要把处理方式写成一句话放进 transform。
+  - code 的 source 是一段 JavaScript：用 $input.first().json 读取上一步的输出（只能读直接上游，需要更多数据就先加一个步骤把它们整理到一起），用 return [{ json: { 输出变量名: 值 } }] 返回，返回的字段名必须与该节点 outputs 中声明的变量名一致。
+  - code 里不要访问文件、子进程、环境变量，不要使用 require、eval，也不要写网络请求；长度控制在 4000 字以内，更复杂的处理拆成多个步骤。
+- 调用外部系统：下面的操作清单里有对应操作就用 integration；没有，但方案写明了接口地址和方法，就用 http action，把 method、url、body 写完整，不要只写一句"调用某某接口"。方案没有给出地址时不要编造，保持 integration 或在 instructions 里说明待确认。
 
 ## 引用
 - 在 action 的字符串字段中，用 {{引用}} 嵌入数据：{{input.工作流输入名}}、{{节点id.输出变量名}}、子流程里的 {{元素名.字段}}。
 - 引用的节点必须在当前步骤之前执行，且输出变量已在该节点的 outputs 中声明。
 - 不带花括号的引用只用在 foreach.over、decision.input、condition.left 中。
 - integration action 的 params 值是字符串，需要传入数据时写成 "{{...}}"，固定值直接写。
+
+## 事件触发（收到邮件等）
+- 方案是"收到某个系统的事件就开始"时，trigger 写成 {"type":"event","detail":"…","integration":"mail","event":"newMail"}，并在 integrations 中加入 {"id":"mail","name":"阿里企业邮箱","purpose":"收到新邮件","access":"manual"}。
+- 事件的字段要声明为工作流输入，后续步骤用 {{input.名字}} 引用：from（发件人，原始 From 头，如"张三 <a@x.com>"）、subject（主题）、textPlain（纯文本正文）。输入的 required 写 false。
+- 其他事件仍然用 {"type":"event","detail":"…"}，不要编造 integration。
 
 ## 集成操作清单
 ${operationList(catalog)}

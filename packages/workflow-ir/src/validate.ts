@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { convertV1 } from "./migrate.js";
+import { codeProblem } from "./coverage.js";
 import {
   REF_PATTERN,
   WorkflowIRSchema,
@@ -116,6 +117,12 @@ export function checkWorkflow(ir: WorkflowIR, options: ValidateOptions = {}): Va
     issues,
     err,
   };
+  if (ir.trigger.integration && !ctx.integrationIds.has(ir.trigger.integration)) {
+    err(`触发器引用的集成不存在：${ir.trigger.integration}`);
+  }
+  if (ir.trigger.integration && ir.trigger.type !== "event") {
+    err("只有事件触发可以指定来源集成");
+  }
   checkFrame(ctx, [{ nodes: ir.nodes, edges: ir.edges }]);
   return issues;
 }
@@ -297,8 +304,11 @@ function checkAction(
     case "human":
       template(action.message);
       break;
-    case "code":
+    case "code": {
+      const problem = action.language === "javascript" ? codeProblem(action.source) : undefined;
+      if (problem) err(problem, n.id);
       break;
+    }
   }
 }
 

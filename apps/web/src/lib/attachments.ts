@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, redirectToLogin, AUTH_EXPIRED_CODE } from "./api";
+import { api, ApiError, isSessionExpired, redirectToLogin, AUTH_EXPIRED_CODE } from "./api";
 import { currentLocale, tr } from "../i18n";
 
 export const MAX_ATTACHMENTS = 4;
@@ -38,7 +38,7 @@ async function uploadFile(conversationId: string, file: File): Promise<UploadRes
   form.append("file", file);
   const res = await fetch(`/api/conversations/${conversationId}/attachments`, { method: "POST", credentials: "include", headers: { "X-Locale": currentLocale() }, body: form });
   const body = await res.json().catch(() => null);
-  if (res.status === 401 || body?.code === AUTH_EXPIRED_CODE) {
+  if (isSessionExpired(res.status, body)) {
     redirectToLogin();
     throw new ApiError(AUTH_EXPIRED_CODE, tr("att.relogin"), res.status);
   }
