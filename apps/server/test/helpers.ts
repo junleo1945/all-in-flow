@@ -31,7 +31,7 @@ export function fakeErp(users: Record<string, number>): typeof fetch {
   }) as typeof fetch;
 }
 
-export async function setupTestApp(url: string, overrides: Partial<AppConfig> = {}) {
+export async function setupTestApp(url: string, overrides: Partial<AppConfig> = {}, opts: { generateIr?: Parameters<typeof createSessionRegistry>[0]["generateIr"] } = {}) {
   const { db, sql } = createDb(url);
   const faux = fauxProvider();
   const runtime = await createRuntime({});
@@ -54,7 +54,7 @@ export async function setupTestApp(url: string, overrides: Partial<AppConfig> = 
     adminUsernames: config.adminUsernames,
     verifyIntervalSeconds: 300,
   });
-  const registry = createSessionRegistry({ db, runtime, agentModel: faux.getModel(), generateIr: async () => ({ ir: salesReport, warnings: [] }) });
+  const registry = createSessionRegistry({ db, runtime, agentModel: faux.getModel(), generateIr: opts.generateIr ?? (async () => ({ ir: salesReport, warnings: [] })) });
   const app = createApp({
     db,
     auth,
