@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { centerScroll, wheelZoomFactor, zoomAt } from "../lib/viewport";
+import { centerScroll, initialView, topCenterScroll, wheelZoomFactor, zoomAt } from "../lib/viewport";
 
 // 视口坐标 = (场景坐标 + scroll) * zoom
 const toScene = (v: { zoom: number; scrollX: number; scrollY: number }, px: number, py: number) => ({
@@ -34,5 +34,32 @@ describe("视口缩放", () => {
     const p = { x: (100 + s.scrollX) * v.zoom, y: (50 + s.scrollY) * v.zoom };
     expect(p.x).toBeCloseTo(400);
     expect(p.y).toBeCloseTo(300);
+  });
+
+  it("topCenterScroll 让内容水平居中、顶部留出边距", () => {
+    const bounds = { minX: 100, minY: 40, width: 200 };
+    const v = { width: 800, zoom: 1.5 };
+    const s = topCenterScroll(bounds, v, 24);
+    expect((100 + 100 + s.scrollX) * v.zoom).toBeCloseTo(400);
+    expect((40 + s.scrollY) * v.zoom).toBeCloseTo(24);
+  });
+
+  it("initialView：放得下就居中，小图不放大", () => {
+    const v = initialView({ minX: 0, minY: 0, width: 200, height: 100 }, { width: 800, height: 600 });
+    expect(v.zoom).toBe(1);
+    expect((100 + v.scrollX) * v.zoom).toBeCloseTo(400);
+    expect((50 + v.scrollY) * v.zoom).toBeCloseTo(300);
+  });
+
+  it("initialView：放不下时以下限缩放，从顶部开始显示", () => {
+    const v = initialView({ minX: 0, minY: 0, width: 300, height: 5000 }, { width: 800, height: 600 });
+    expect(v.zoom).toBe(1);
+    expect((0 + v.scrollY) * v.zoom).toBeCloseTo(24);
+    expect((150 + v.scrollX) * v.zoom).toBeCloseTo(400);
+  });
+
+  it("initialView：下限调低时仍可缩小适应全图", () => {
+    const v = initialView({ minX: 0, minY: 0, width: 300, height: 1200 }, { width: 800, height: 600 }, { pad: 24, minZoom: 0.1 });
+    expect(v.zoom).toBeCloseTo((600 - 48) / 1200);
   });
 });
