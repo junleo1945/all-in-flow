@@ -32,7 +32,6 @@ const draftFor = (facts: SkillFacts, over: Partial<AuthorDraft> = {}): AuthorDra
     conventions: "不要替用户做复核。因为复核结果决定是否放款。",
   },
   references: [],
-  evals: [1, 2, 3].map((i) => ({ prompt: `帮我核对这批报销单 ${i}`, expected_output: "逐张核对并给出结果表" })),
   todo: [],
   ...over,
 });
@@ -83,14 +82,6 @@ describe("parseAuthorDraft", () => {
     expect(parseAuthorDraft(d).problems).toContain("references 最多 5 个文件");
   });
 
-  it("evals 必须恰好 3 条", () => {
-    const d = good();
-    d.evals = d.evals.slice(0, 2);
-    expect(parseAuthorDraft(d).problems).toContain("evals 必须恰好 3 条，现在是 2 条");
-    d.evals = [...d.evals, { prompt: "x" }, { prompt: "y", expected_output: "z" }];
-    expect(parseAuthorDraft(d).problems.some((p) => p.includes("非空的 prompt 和 expected_output"))).toBe(true);
-  });
-
   it("todo 截断到 20 条、每条 200 字", () => {
     const d = good();
     d.todo = Array.from({ length: 30 }, () => "字".repeat(300));
@@ -121,17 +112,16 @@ describe("assembleSkill", () => {
     expect(md).not.toContain("## 输入");
   });
 
-  it("加入 references、evals/evals.json，INSTALL.md 末尾说明怎么继续打磨", () => {
+  it("加入模型新增的 references，不再生成 evals 目录", () => {
     const files = assembled({ references: [{ path: "references/report-template.md", content: "# 模板" }] });
-    expect(files.map((f) => f.path)).toEqual(expect.arrayContaining(["references/report-template.md", "evals/evals.json", "scripts/01-02-code.mjs"]));
-    const evals = JSON.parse(String(files.find((f) => f.path === "evals/evals.json")!.content));
-    expect(evals).toMatchObject({ skill_name: "expense-check", evals: [{ id: 1, files: [] }, { id: 2 }, { id: 3 }] });
-    expect(String(files.find((f) => f.path === "INSTALL.md")!.content)).toContain("评测并改进这个 skill");
+    expect(files.map((f) => f.path)).toEqual(expect.arrayContaining(["references/report-template.md", "scripts/01-02-code.mjs"]));
+    expect(files.some((f) => f.path.startsWith("evals/"))).toBe(false);
+    expect(String(files.find((f) => f.path === "INSTALL.md")!.content)).not.toContain("evals");
   });
 
   it("好草稿通过全部检查；骨架文件没有被改动", () => {
     const files = assembled();
-    expect(validateSkill(files, { facts, requireEvals: true }).filter((i) => i.level === "error")).toEqual([]);
+    expect(validateSkill(files, { facts }).filter((i) => i.level === "error")).toEqual([]);
     const plain = skillExporter.compile(lower(ir), OPTIONS).map((f) => f.path.replace(/^expense-check\//, ""));
     expect(files.map((f) => f.path)).toEqual(expect.arrayContaining(plain));
   });
@@ -142,7 +132,7 @@ describe("assembleSkill", () => {
       sections: { ...draftFor(facts).sections, steps: `${steps}\n见 \`references/missing.md\`。接口在 https://erp.corp.example/api。` },
       references: [{ path: "references/unused.md", content: "x" }],
     });
-    const codes = validateSkill(bad, { facts, requireEvals: true }).map((i) => i.code);
+    const codes = validateSkill(bad, { facts }).map((i) => i.code);
     expect(codes).toEqual(expect.arrayContaining(["step-missing", "missing-file", "secret", "reference-unlinked"]));
   });
 
@@ -151,6 +141,6 @@ describe("assembleSkill", () => {
     expect(packageFiles(ir, files, { packaging: "zip" }).map((f) => f.path)[0]).toBe("expense-check/SKILL.md");
     const plugin = packageFiles(ir, files, { packaging: "claude-plugin" }).map((f) => f.path);
     expect(plugin[0]).toBe("expense-check/.claude-plugin/plugin.json");
-    expect(plugin).toContain("expense-check/skills/expense-check/evals/evals.json");
+    expect(plugin).toContain("expense-check/skills/expense-check/SKILL.md");
   });
 });

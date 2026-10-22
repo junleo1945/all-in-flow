@@ -22,15 +22,12 @@ export interface ValidateOptions {
   name?: string;
   /** 给出时同时做忠实度检查 */
   facts?: SkillFacts;
-  /** 必须附带 evals/evals.json */
-  requireEvals?: boolean;
 }
 
 export const DESCRIPTION_LIMIT = 1024;
 export const COMPATIBILITY_LIMIT = 500;
 export const BODY_LINE_LIMIT = 500;
 export const NAME_LIMIT = 64;
-export const EVAL_COUNT = 3;
 
 /** 第三人称：不以「我」「你」「I」「You」开头 */
 export const FIRST_PERSON = /^\s*(我|你|您|我们|I\b|I'|We\b|You\b|Your\b)/i;
@@ -94,7 +91,7 @@ const ROOT_FILES = "INSTALL\\.md";
 export function referencedPaths(content: string): string[] {
   const found = new Set<string>();
   const add = (p: string) => found.add(p.replace(/^\.\//, "").replace(/[.,;:，。；：)）]+$/, ""));
-  for (const m of content.matchAll(/`((?:scripts|references|assets|evals)\/[^`\s<>*]+)`/g)) add(m[1]!);
+  for (const m of content.matchAll(/`((?:scripts|references|assets)\/[^`\s<>*]+)`/g)) add(m[1]!);
   for (const m of content.matchAll(new RegExp("`(" + ROOT_FILES + ")`", "g"))) add(m[1]!);
   for (const m of content.matchAll(/\]\((?!https?:|mailto:|#)([^)\s#]+)(?:#[^)]*)?\)/g)) add(m[1]!);
   for (const m of content.matchAll(/(?:^|[\s(（])((?:scripts|references|assets)\/[\w./-]+\.\w+)/gm)) add(m[1]!);
@@ -216,30 +213,8 @@ export function validateSkill(files: ExportFile[], options: ValidateOptions = {}
 
   // 地址与密钥：文档类文件里一律不允许（references/workflow.json 是流程图原文，不在此列）
   for (const f of files) {
-    if (!f.path.endsWith(".md") && f.path !== "evals/evals.json") continue;
+    if (!f.path.endsWith(".md")) continue;
     for (const why of findSecrets(text(f))) add("error", "secret", `${f.path} ${why}`, f.path);
-  }
-
-  // evals
-  const evalsFile = byPath.get("evals/evals.json");
-  if (!evalsFile) {
-    if (options.requireEvals) add("error", "evals-missing", "缺少 evals/evals.json", "evals/evals.json");
-  } else {
-    let parsedEvals: any;
-    try {
-      parsedEvals = JSON.parse(text(evalsFile));
-    } catch {
-      add("error", "evals-invalid", "evals/evals.json 不是合法的 JSON", "evals/evals.json");
-    }
-    if (parsedEvals !== undefined) {
-      const list: unknown[] = Array.isArray(parsedEvals?.evals) ? parsedEvals.evals : [];
-      const bad = list.some((e: any) => typeof e?.prompt !== "string" || !e.prompt.trim() || typeof e?.expected_output !== "string" || !e.expected_output.trim());
-      if (list.length !== EVAL_COUNT) add("error", "evals-count", `evals 必须恰好 ${EVAL_COUNT} 条，现在是 ${list.length} 条`, "evals/evals.json");
-      else if (bad) add("error", "evals-invalid", "每条 eval 都要有非空的 prompt 和 expected_output", "evals/evals.json");
-      if (expectedName && parsedEvals?.skill_name !== undefined && parsedEvals.skill_name !== expectedName) {
-        add("warning", "evals-name", `evals 的 skill_name 应为「${expectedName}」`, "evals/evals.json");
-      }
-    }
   }
 
   if (options.facts) faithfulness(md, body, options.facts, add);

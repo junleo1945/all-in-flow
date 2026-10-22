@@ -287,19 +287,6 @@ describe("校验器：规范层", () => {
     expect(validateSkill([...base, { path: "references/extra.json", content: '{"url":"https://x.test/a"}' }], { name: "expense-check" }).some((i) => i.code === "secret")).toBe(false);
   });
 
-  it("evals：必须恰好 3 条，各有 prompt 和 expected_output", () => {
-    const base = filesOf(loopIr());
-    const evals = (value: unknown): ExportFile[] => [...base, { path: "evals/evals.json", content: typeof value === "string" ? value : JSON.stringify(value) }];
-    const item = { id: 1, prompt: "帮我核对本周报销单", expected_output: "逐条核对并给出结果表", files: [] };
-    const run = (files: ExportFile[]) => validateSkill(files, { name: "expense-check", requireEvals: true });
-    expect(run(evals({ skill_name: "expense-check", evals: [item, item, item] })).filter((i) => i.level === "error")).toEqual([]);
-    expect(codes(run(evals({ evals: [item] })))).toContain("evals-count");
-    expect(codes(run(evals({ evals: [item, item, { prompt: "x" }] })))).toContain("evals-invalid");
-    expect(codes(run(evals("{oops")))).toContain("evals-invalid");
-    expect(codes(run(base))).toContain("evals-missing");
-    expect(codes(validateSkill(base, { name: "expense-check" }))).not.toContain("evals-missing");
-  });
-
   it("工具函数：frontmatter 解析与引用提取", () => {
     expect(parseFrontmatter('---\nname: a\ndescription: "x: y"\nmetadata:\n  k: v\n---\n正文')).toEqual({ fields: { name: "a", description: "x: y" }, body: "正文" });
     expect(parseFrontmatter("没有")).toBeUndefined();

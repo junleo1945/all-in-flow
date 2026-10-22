@@ -25,7 +25,7 @@ const result: skillExport.SkillExportResult = {
   version: 2,
   files: [
     { path: "weekly/SKILL.md", content: "# 周报" },
-    { path: "weekly/evals/evals.json", content: "{}" },
+    { path: "weekly/references/notes.md", content: "# 笔记" },
   ],
   filename: "weekly.skill.zip",
   issues: [{ level: "warning", message: "description 缺少使用时机" }],

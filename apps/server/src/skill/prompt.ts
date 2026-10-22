@@ -26,7 +26,6 @@ export const AUTHOR_SYSTEM_PROMPT = `你是 Agent Skill 的撰写者。用户已
     "conventions": "……"
   },
   "references": [{"path": "references/xxx.md", "content": "……"}],
-  "evals": [{"prompt": "……", "expected_output": "……"}],
   "todo": ["……"]
 }
 SKILL.md 由系统按固定顺序拼装：frontmatter 的 name、各节的标题、流程图和「数据引用」一节都由系统添加。各节里不要写一级、二级标题（# 或 ##），需要小标题时用 ### 或加粗。
@@ -62,9 +61,6 @@ SKILL.md 由系统按固定顺序拼装：frontmatter 的 name、各节的标题
 - 给具体的例子，例子要来自这个流程的真实内容。
 - 不写日期、版本号等会过时的内容。
 - 路径一律用正斜杠。
-
-## evals
-恰好 3 条，是用户平时会对 Agent 说的话，不是技术指令；要覆盖：正常情况、数据不全或用户不配合的情况、容易让 Agent 跳步或编造数据的情况。expected_output 写期望的行为和结果，可以据此判断做得对不对。
 
 ## references
 只有当某段内容太长、不是每次都要读时才新增，路径形如 references/xxx-yyy.md（小写英文和连字符），最多 5 个。新增的文件必须在 steps 或其他节里写明什么时候读它。大多数情况下不需要新增。
