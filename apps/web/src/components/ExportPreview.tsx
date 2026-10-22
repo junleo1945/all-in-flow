@@ -95,6 +95,7 @@ export function ExportPreview({ spec, onClose, top }: { spec: ExportPreviewSpec;
       <div className="card modal export-preview" role="dialog" aria-label={spec.title} onClick={(e) => e.stopPropagation()}>
         <button className="x" onClick={onClose} aria-label={t("exp.close")}>×</button>
         <h2>{spec.title}</h2>
+        <div className="ep-scroll">
         {spec.notes.length > 0 && (
           <div className="ep-notes">
             {spec.notes.map((n) => (
@@ -129,6 +130,7 @@ export function ExportPreview({ spec, onClose, top }: { spec: ExportPreviewSpec;
               <pre className="ep-code">{text}</pre>
             )}
           </section>
+        </div>
         </div>
         <div className="ep-foot">
           {err ? <span className="notice-error">{err}</span> : <span />}
