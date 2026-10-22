@@ -34,6 +34,10 @@ export MODELS_JSON_PATH="$ROOT/config/models.json"  # 必须是绝对路径，�
 export ATTACHMENT_DIR="$ROOT/.dev-uploads"
 export API_TARGET="http://localhost:$SERVER_PORT"  # 前端 vite 代理到本地服务端
 
+# 服务端引用 packages/、plugins/ 下各包编译后的 dist，tsx watch 不会重新编译它们；
+# 每次启动前先构建，避免切分支或拉代码后还在用旧产物（按依赖顺序，只构建这两类，不含 apps/）
+pnpm --filter "./packages/*" --filter "./plugins/*" build
+
 pids=()
 # 递归结束进程树：tsx、vite 是 subshell 的子进程，只杀 subshell 会留下它们占着端口
 kill_tree() {
