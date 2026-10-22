@@ -227,6 +227,14 @@ export function CanvasView({
     el.addEventListener("wheel", onWheel, { capture: true, passive: false });
     return () => el.removeEventListener("wheel", onWheel, { capture: true });
   }, [api, wheelZoom]);
+  // 手写字体是按需下载的：文字第一次绘制时字体可能还没到，先用了后备字体。字体到位后重绘一次，不必等用户缩放
+  useEffect(() => {
+    if (!api || typeof document === "undefined" || !document.fonts) return;
+    const redraw = () => api.refresh();
+    document.fonts.addEventListener("loadingdone", redraw);
+    void document.fonts.ready.then(redraw);
+    return () => document.fonts.removeEventListener("loadingdone", redraw);
+  }, [api]);
   // 回调必须保持同一个引用：每次渲染都换新函数，Excalidraw 会重复回调，导致无限重渲染
   const handleApi = useCallback((next: ExcalidrawAPI) => {
     apiRef.current = next;
