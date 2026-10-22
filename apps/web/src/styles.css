@@ -406,11 +406,14 @@ table.tasks { width: 100%; border-collapse: collapse; font-size: 13px; }
 .panel-edge:hover { background: var(--sheet-2); color: var(--ink); }
 
 /* 导出预览：左侧文件树，右侧内容 */
-.export-preview { width: min(960px, 100%); padding: 22px 24px 18px; }
+.export-preview { width: min(960px, 100%); padding: 22px 24px 0; display: flex; flex-direction: column; overflow: hidden; }
+.export-preview > :not(.ep-scroll) { flex: none; }
+/* 标题、右上角关闭、底部按钮固定，只有中间内容区滚动 */
+.ep-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; margin: 0 -24px; padding: 0 24px 14px; }
 .export-preview h2 { margin-bottom: 10px; }
 .ep-notes { display: grid; gap: 6px; margin-bottom: 12px; }
 .ep-notes .req { margin: 0; }
-.ep-body { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 12px; height: min(62vh, 560px); min-height: 0; }
+.ep-body { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 12px; height: min(62vh, 560px); min-height: 260px; }
 .ep-body.single { grid-template-columns: minmax(0, 1fr); }
 .ep-tree { border: 1px solid var(--line); border-radius: 10px; background: var(--sheet-2); overflow: auto; padding: 6px; min-height: 0; }
 .ep-dir { font-family: var(--mono); font-size: 12px; color: var(--ink-3); padding: 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -444,13 +447,13 @@ table.tasks { width: 100%; border-collapse: collapse; font-size: 13px; }
 .pd code { font-family: var(--mono); font-size: 12.5px; background: var(--sheet-2); padding: 0 4px; border-radius: 4px; }
 .ep-prep { display: grid; gap: 4px; margin-bottom: 12px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--sheet-2); font-size: 13px; }
 .ep-prep ul { margin: 2px 0 0; padding-left: 18px; color: var(--ink-2); }
-/* 弹窗内容较高时需要滚动，底部的复制/下载按钮始终停在可见位置 */
-.export-preview .ep-foot { position: sticky; bottom: 0; margin: 14px -24px -18px; padding: 12px 24px 18px; background: var(--sheet); border-top: 1px solid var(--line); }
+/* 底部的复制/下载按钮始终停在可见位置 */
+.export-preview .ep-foot { margin: 0 -24px; padding: 12px 24px 18px; background: var(--sheet); border-top: 1px solid var(--line); }
 .ep-actions { display: inline-flex; gap: 8px; margin-left: auto; }
 .ep-variants { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; font-size: 13px; }
 .ep-variants .seg button { height: 28px; padding: 0 12px; font-size: 12.5px; }
 @media (max-width: 640px) {
-  .ep-body { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .ep-body { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 0; }
   .ep-tree { max-height: 160px; }
   .ep-pane { height: 52vh; }
 }
