@@ -21,9 +21,11 @@ export interface Persona {
   /** 模拟用户的说话风格，例如"口语、简短、经常说'还行'" */
   style: string;
   hiddenPainPoints: HiddenPainPoint[];
+  /** 为 true 时，模拟用户对每件事要花多久没有概念：被要求报分钟数就说"不好说"，被追问会不耐烦 */
+  cannotEstimate?: boolean;
 }
 
-export const PERSONAS: Persona[] = [
+const BASE_PERSONAS: Persona[] = [
   {
     id: "sales-ops",
     role: "销售运营",
@@ -135,3 +137,14 @@ export const PERSONAS: Persona[] = [
     ],
   },
 ];
+
+/**
+ * 变体：同一个人设，但说不清每件事要花多久。现实中很常见，用来检查访谈会不会为了耗时反复追问。
+ * 评测"量化完整度""耗时是否已知"时，这几个人设的耗时已知比例本来就该低，不要拿它和其他人设放在一起比。
+ */
+const vague = (id: string): Persona => {
+  const base = BASE_PERSONAS.find((p) => p.id === id)!;
+  return { ...base, id: `${base.id}-vague`, style: `${base.style}；对每件事花多久没什么概念`, cannotEstimate: true };
+};
+
+export const PERSONAS: Persona[] = [...BASE_PERSONAS, vague("sales-ops"), vague("finance-accountant"), vague("hr-recruiter")];

@@ -16,6 +16,10 @@ plugins/exporter-prompt 对话提示词导出插件（粘贴到聊天窗口使�
 docker/              nginx 配置
 ```
 
+## 在自己的 Claude / Codex 里使用
+
+网站的 `/skill` 页可以下载访谈 Skill 并生成访问令牌。用户把 Skill 装进本地的 Claude Code、Codex 后，不打开网站也能访谈；访谈得出的工作流通过平台 MCP（`POST /api/mcp`，Bearer 令牌认证）导入，换回一个画布渲染的流程图链接。设计见 [docs/design.md](docs/design.md) 第 18 章。
+
 ## 本地开发
 
 需要 Node 24、pnpm 10、Docker。

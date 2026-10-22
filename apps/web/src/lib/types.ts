@@ -15,6 +15,8 @@ export interface Task {
   title: string;
   frequency: Frequency;
   minutesPerRun?: number;
+  /** 用户选的耗时档位；unknown 表示问过但说不准 */
+  durationBucket?: "quick" | "half_hour" | "hours" | "half_day" | "day" | "unknown";
   steps: string[];
   systems: string[];
 }
@@ -28,6 +30,8 @@ export interface PainPoint {
   automatable: number;
   evidence?: string;
   score: number | null;
+  /** 为 true 表示耗时待确认，分数是按默认耗时估算的 */
+  assumed?: boolean;
 }
 
 export interface Candidate {
@@ -73,6 +77,13 @@ export function stageLabel(key: string): string | undefined {
 
 export function freqLabel(f: Frequency): string {
   return tr(`freq.${f}`);
+}
+
+/** 表格里的耗时：选了档位显示档位，说不准显示「说不准」，直接说的分钟数显示分钟，都没有显示「—」 */
+export function durationLabel(t: Pick<Task, "minutesPerRun" | "durationBucket">): string {
+  if (t.durationBucket === "unknown") return tr("profile.dur.unknown");
+  if (t.durationBucket) return tr(`profile.dur.${t.durationBucket}`);
+  return t.minutesPerRun !== undefined ? `${t.minutesPerRun} min` : "—";
 }
 
 /** 按优先级排序，未评分的排在最后 */

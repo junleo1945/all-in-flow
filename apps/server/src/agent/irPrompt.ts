@@ -2,12 +2,17 @@
  * 生成 Workflow IR v2 的提示词。
  * 内容在进程内固定，整个系统提示词保持静态，可以命中缓存。
  */
-export function buildIrSystemPrompt(): string {
-  return `你是工作流编译器。根据用户给出的方案摘要，输出一个 JSON 对象，表示 Workflow IR v2。
+const IR_INTRO = `你是工作流编译器。根据用户给出的方案摘要，输出一个 JSON 对象，表示 Workflow IR v2。
 
 ## 输出格式
 - 只输出一个 JSON 对象，不要解释，不要使用 Markdown 代码块。
-- 顶层字段：version(固定为 2)、kind(固定为 "automation")、slug(kebab-case 英文)、name(中文)、description(做什么 + 什么时候用，例如"……。当用户需要……时使用。")、trigger({type: "manual"|"schedule"|"event", detail, cron?})、inputs(Variable[])、nodes、edges、source({painPointIds, savedMinutesPerWeek?})。
+`;
+
+/**
+ * Workflow IR v2 的格式、节点、引用规则和示例。编译器提示词和下载给用户的 Skill（references/ir-spec.md）共用这一份，
+ * 规则只在这里维护一次。
+ */
+export const IR_SPEC = `- 顶层字段：version(固定为 2)、kind(固定为 "automation")、slug(kebab-case 英文)、name(中文)、description(做什么 + 什么时候用，例如"……。当用户需要……时使用。")、trigger({type: "manual"|"schedule"|"event", detail, cron?})、inputs(Variable[])、nodes、edges、source({painPointIds, savedMinutesPerWeek?})。
 - Variable 的字段：name（英文小写加下划线，不含空格、点和花括号）、type（string/number/boolean/object/array/file）、description、required（仅工作流输入使用）。
 
 ## 节点
@@ -48,6 +53,9 @@ export function buildIrSystemPrompt(): string {
 
 ## 示例（结构示意，内容需按方案填写）
 {"version":2,"kind":"automation","slug":"weekly-report","name":"周报汇总","description":"汇总本周数据生成周报。当用户需要写周报时使用。","trigger":{"type":"manual","detail":"用户主动要求时"},"inputs":[{"name":"week","type":"string","description":"周次","required":true}],"nodes":[{"id":"s","type":"start","title":"开始"},{"id":"n1","type":"step","title":"拉取订单","executor":"deterministic","instructions":"拉取本周订单","chatInstructions":"在 ERP 的订单查询里，把下单时间设为本周一到现在，导出订单列表","action":{"kind":"http","method":"GET","url":"https://erp.example.com/api/orders?week={{input.week}}"},"outputs":[{"name":"orders","type":"array","description":"订单列表"}]},{"id":"n2","type":"decision","title":"有异常订单？","mode":"llm","question":"订单中是否有异常？","input":"n1.orders"},{"id":"n4","type":"step","title":"人工确认异常","executor":"human","instructions":"列出异常订单，请用户确认是否计入","action":{"kind":"human","message":"请确认异常订单 {{n1.orders}} 是否计入","approval":true}},{"id":"n3","type":"step","title":"生成周报","executor":"llm","instructions":"汇总订单生成周报","action":{"kind":"llm","prompt":"根据 {{n1.orders}} 生成周报"}},{"id":"e","type":"end","title":"结束"}],"edges":[{"from":"s","to":"n1"},{"from":"n1","to":"n2"},{"from":"n2","to":"n4","label":"有异常"},{"from":"n4","to":"n3"},{"from":"n2","to":"n3","label":"没有","default":true},{"from":"n3","to":"e"}],"source":{"painPointIds":["p1"]}}`;
+
+export function buildIrSystemPrompt(): string {
+  return IR_INTRO + IR_SPEC;
 }
 
 export const IR_SYSTEM_PROMPT = buildIrSystemPrompt();

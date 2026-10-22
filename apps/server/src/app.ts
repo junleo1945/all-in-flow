@@ -13,6 +13,9 @@ import { skillExportRoutes } from "./routes/skillExport.js";
 import type { SkillAuthor } from "./skill/authorAgent.js";
 import type { McpDeps } from "./n8n/mcp.js";
 import { shareRoutes } from "./routes/shares.js";
+import { accessTokenRoutes } from "./routes/accessTokens.js";
+import { mcpRoutes } from "./routes/mcp.js";
+import { localSkillRoutes } from "./routes/localSkill.js";
 import { adminRoutes } from "./routes/admin.js";
 import { exporterRoutes } from "./routes/exporters.js";
 import { attachmentRoutes } from "./routes/attachments.js";
@@ -78,6 +81,13 @@ export function createApp(deps: AppDeps) {
   app.route("/api/authorizations", authorizationRoutes({ db: deps.db, secretKey: deps.config.authSecretKey, limiter: new Limiter(10, 60_000), mcp: { ...deps.n8nMcp, allowPrivateHosts: deps.config.allowPrivateHosts } }));
   app.route("/api/workflows", n8nExportRoutes({ db: deps.db, config: deps.config, exporter: deps.n8nExporter, limiter: new Limiter(3, 60_000), mcp: deps.n8nMcp }));
   app.route("/api/workflows", skillExportRoutes({ db: deps.db, config: deps.config, author: deps.skillAuthor, limiter: new Limiter(3, 60_000) }));
+  app.use("/api/access-tokens", authed);
+  app.use("/api/access-tokens/*", authed);
+  app.route("/api/access-tokens", accessTokenRoutes({ db: deps.db, limiter: new Limiter(10, 60_000) }));
+  app.use("/api/local-skill", authed);
+  app.route("/api/local-skill", localSkillRoutes({ publicBaseUrl: deps.config.publicBaseUrl }));
+  // 本地 Agent 通过个人访问令牌调用的 MCP 端点：不经过 cookie 登录
+  app.route("/api/mcp", mcpRoutes({ db: deps.db, publicBaseUrl: deps.config.publicBaseUrl }));
   app.use("/api/shares", authed);
   app.use("/api/shares/*", authed);
   app.route("/api", shareRoutes(deps));

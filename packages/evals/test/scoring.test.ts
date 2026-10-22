@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PERSONAS } from "../src/personas.js";
-import { compare, scoreRun, summarize, toMarkdown, type EvalRun } from "../src/scoring.js";
+import { compare, countTimeQuestions, scoreRun, summarize, toMarkdown, type EvalRun } from "../src/scoring.js";
 
 const sales = PERSONAS.find((p) => p.id === "sales-ops")!;
 
@@ -110,11 +110,14 @@ describe("汇总与对比", () => {
 });
 
 describe("人设数据", () => {
-  it("共 10 个人设，每个都有 3 个隐藏痛点且 id 唯一", () => {
-    expect(PERSONAS).toHaveLength(10);
-    const ids = PERSONAS.flatMap((p) => p.hiddenPainPoints.map((h) => h.id));
+  it("10 个基础人设，每个都有 3 个隐藏痛点且 id 唯一；另有 3 个「说不清耗时」的变体", () => {
+    const base = PERSONAS.filter((p) => !p.cannotEstimate);
+    expect(base).toHaveLength(10);
+    expect(PERSONAS).toHaveLength(13);
+    const ids = base.flatMap((p) => p.hiddenPainPoints.map((h) => h.id));
     expect(new Set(ids).size).toBe(ids.length);
     for (const p of PERSONAS) expect(p.hiddenPainPoints).toHaveLength(3);
+    expect(new Set(PERSONAS.map((p) => p.id)).size).toBe(PERSONAS.length);
   });
 });
 
@@ -169,5 +172,71 @@ describe("数据整理的可执行性", () => {
   it("报告里有描述式整理一列", () => {
     const m = [scoreRun(sales, { ...perfect, executability: [{ transformSteps: 4, descriptiveTransforms: 1, unsafeCode: 0 }] })];
     expect(toMarkdown(m, summarize(m))).toContain("描述式整理");
+  });
+});
+
+describe("耗时相关指标", () => {
+  it("耗时已知 = 有分数且不是按默认耗时估算的；量化完整度把估算的分数也算上", () => {
+    const m = scoreRun(sales, {
+      ...perfect,
+      painPoints: [
+        { title: "a", detail: "", score: 100 },
+        { title: "b", detail: "", score: 50, assumed: true },
+        { title: "c", detail: "", score: null },
+        { title: "d", detail: "", score: 10 },
+      ],
+    });
+    expect(m.quantified).toBe(0.75);
+    expect(m.timeKnown).toBe(0.5);
+  });
+
+  it("统计顾问有几条回复在问耗时：问时长的字眼，或给出耗时档位选项", () => {
+    expect(
+      countTimeQuestions([
+        "每周一次，记下了。这件事一次大概要多久？",
+        "你们用什么系统？",
+        "单次大概多久：十几分钟以内、半小时左右、一两个小时、半天左右、一天以上、说不准？",
+        "上一次花了多少时间？",
+        "那这个痛点有多严重？",
+      ]),
+    ).toBe(3);
+  });
+
+  it("汇总取每次访谈的平均追问次数；没有记录的不参与平均", () => {
+    const base = scoreRun(sales, { ...perfect, timeQuestions: 4 });
+    const other = scoreRun(sales, { ...perfect, timeQuestions: 2 });
+    const none = scoreRun(sales, perfect);
+    expect(none.timeQuestions).toBeNull();
+    expect(summarize([base, other, none]).timeQuestions).toBe(3);
+    expect(summarize([none]).timeQuestions).toBeNull();
+  });
+
+  it("和没有这些指标的旧基线对比时，新指标的变化量为 null，不会算出 NaN", () => {
+    const current = summarize([scoreRun(sales, { ...perfect, timeQuestions: 3 })]);
+    const oldBaseline = { ...summarize([scoreRun(sales, perfect)]) } as any;
+    delete oldBaseline.timeKnown;
+    delete oldBaseline.timeQuestions;
+    const diff = compare(current, oldBaseline);
+    expect(diff.timeKnown).toBeNull();
+    expect(diff.timeQuestions).toBeNull();
+    expect(diff.recall).toBe(0);
+  });
+
+  it("报告里有耗时已知和追问耗时两列", () => {
+    const m = scoreRun(sales, { ...perfect, timeQuestions: 5 });
+    const md = toMarkdown([m], summarize([m]));
+    expect(md).toContain("耗时已知");
+    expect(md).toContain("追问耗时");
+    expect(md).toMatch(/\| sales-ops \| 100% \| 100% \| 100% \| 5 \|/);
+  });
+
+  it("人设里有三个「说不清耗时」的变体，和原人设的痛点一致", () => {
+    const vague = PERSONAS.filter((p) => p.cannotEstimate);
+    expect(vague.map((p) => p.id)).toEqual(["sales-ops-vague", "finance-accountant-vague", "hr-recruiter-vague"]);
+    for (const v of vague) {
+      const base = PERSONAS.find((p) => p.id === v.id.replace("-vague", ""))!;
+      expect(v.hiddenPainPoints).toEqual(base.hiddenPainPoints);
+      expect(base.cannotEstimate).toBeUndefined();
+    }
   });
 });

@@ -543,3 +543,31 @@ table.tasks { width: 100%; border-collapse: collapse; font-size: 13px; }
 .n8n-export .ep-gaps { max-height: none; }
 .auth-paste { resize: vertical; min-height: 140px; font-family: ui-monospace, monospace; font-size: 12.5px; line-height: 1.5; }
 .n8n-export-json { resize: vertical; min-height: 240px; }
+
+/* 本地 Skill 页：下载 Skill、生成访问令牌、连接本地助手 */
+.skill-page { flex: 1; width: min(860px, 100%); margin: 0 auto; padding: 36px 24px 56px; display: grid; gap: 18px; align-content: start; }
+.skill-page h1 { font-family: var(--serif); font-size: 26px; font-weight: 900; }
+.skill-intro { color: var(--ink-2); line-height: 1.7; }
+.skill-step { padding: 22px 24px; display: grid; gap: 12px; }
+.skill-step h2 { font-family: var(--serif); font-size: 18px; font-weight: 900; }
+.skill-step h3 { font-size: 14.5px; margin-top: 8px; }
+.skill-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.skill-install ul { margin: 4px 0; padding-left: 20px; display: grid; gap: 2px; }
+.skill-files summary { cursor: pointer; color: var(--ink-2); }
+.skill-files ul { margin: 8px 0; padding-left: 20px; }
+.skill-files pre { margin-top: 8px; max-height: 360px; overflow: auto; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--sheet-2); font: 12.5px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.skill-token-form { display: grid; grid-template-columns: minmax(0, 1fr) 140px auto; gap: 12px; align-items: end; }
+.skill-created { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--sheet-2); }
+.skill-created .notice { margin-top: 0; }
+.skill-tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); }
+.skill-tabs button { padding: 6px 12px; border-bottom: 2px solid transparent; color: var(--ink-3); white-space: nowrap; }
+.skill-tabs button.on { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+.skill-code { display: grid; gap: 4px; min-width: 0; }
+.skill-code-row { display: flex; gap: 8px; align-items: flex-start; min-width: 0; }
+.skill-code pre { flex: 1; min-width: 0; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--sheet-2); font: 12.5px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.skill-copy { height: 32px; flex: none; }
+.skill-step .auth-main .muted { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .skill-page { padding: 20px 14px 40px; }
+  .skill-token-form { grid-template-columns: minmax(0, 1fr); }
+}

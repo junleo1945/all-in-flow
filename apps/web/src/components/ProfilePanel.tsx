@@ -1,5 +1,5 @@
 import { useI18n } from "../i18n";
-import { freqLabel, rankPainPoints, type PainPoint, type Profile } from "../lib/types";
+import { durationLabel, freqLabel, rankPainPoints, type PainPoint, type Profile } from "../lib/types";
 import { Select } from "./ui/Select";
 
 const SCORE_OPTIONS = [1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n) }));
@@ -40,7 +40,7 @@ export function ProfilePanel({
                 <tr key={task.id}>
                   <td>{task.title}</td>
                   <td>{freqLabel(task.frequency)}</td>
-                  <td className="num">{task.minutesPerRun !== undefined ? `${task.minutesPerRun} min` : "—"}</td>
+                  <td className="num">{durationLabel(task)}</td>
                 </tr>
               ))}
             </tbody>
@@ -83,8 +83,8 @@ export function ProfilePanel({
               </label>
             </div>
             <div className="prio">
-              <span className="v">{p.score === null ? "—" : p.score}</span>
-              <small>{t("profile.priority")}</small>
+              <span className="v" title={p.assumed ? t("profile.unquantifiedHint") : undefined}>{p.score === null ? "—" : `${p.assumed ? "≈ " : ""}${p.score}`}</span>
+              <small>{p.assumed ? `${t("profile.priority")} · ${t("profile.unquantified")}` : t("profile.priority")}</small>
             </div>
           </div>
         ))}

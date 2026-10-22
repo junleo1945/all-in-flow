@@ -29,6 +29,13 @@
       "when": 1792507149215,
       "tag": "0003_material_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792596108631,
+      "tag": "0004_late_khan",
+      "breakpoints": true
     }
   ]
 }

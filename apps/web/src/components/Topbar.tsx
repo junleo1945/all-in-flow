@@ -97,6 +97,7 @@ export function UserMenu({ name }: { name: string }) {
       {open && (
         <div className="pop-menu" role="menu">
           <button type="button" role="menuitem" onClick={() => go("/mermaid")}>{t("shell.mermaidPreview")}</button>
+          <button type="button" role="menuitem" onClick={() => go("/skill")}>{t("shell.localSkill")}</button>
           <button type="button" role="menuitem" onClick={() => { setOpen(false); setAuthOpen(true); }}>{t("shell.authorizations")}</button>
           <button type="button" role="menuitem" onClick={() => { setOpen(false); setLocale(locale === "zh" ? "en" : "zh"); }}>{t("shell.language")}</button>
         </div>
