@@ -26,3 +26,36 @@ export function zoomAt(
 export function centerScroll(sx: number, sy: number, v: { width: number; height: number; zoom: number }) {
   return { scrollX: v.width / (2 * v.zoom) - sx, scrollY: v.height / (2 * v.zoom) - sy };
 }
+
+/** 首次适应内容的缩放下限：再小，手写字体的细笔画就会发虚 */
+export const MIN_FIT_ZOOM = 1;
+
+/**
+ * 首次打开时的视图：能完整放下就居中显示，放不下则按 MIN_FIT_ZOOM 为下限缩放。
+ * 为下限所限放不下时，水平居中、从顶部开始显示，其余部分靠滚动或缩略图查看。
+ * 缩放上限为 1（小图不放大）。
+ */
+export function initialView(
+  bounds: { minX: number; minY: number; width: number; height: number },
+  v: { width: number; height: number },
+  opts = { pad: 24, minZoom: MIN_FIT_ZOOM },
+) {
+  const fit = Math.min((v.width - opts.pad * 2) / bounds.width, (v.height - opts.pad * 2) / bounds.height);
+  const zoom = Math.max(Math.min(fit, 1), opts.minZoom);
+  if (fit >= zoom) {
+    const c = centerScroll(bounds.minX + bounds.width / 2, bounds.minY + bounds.height / 2, { ...v, zoom });
+    return { zoom, ...c };
+  }
+  return { zoom, ...topCenterScroll(bounds, { width: v.width, zoom }, opts.pad) };
+}
+
+/**
+ * 以缩放 zoom 显示场景外接矩形时，让内容水平居中、顶部留 pad 像素所需的滚动值。
+ */
+export function topCenterScroll(
+  bounds: { minX: number; minY: number; width: number },
+  v: { width: number; zoom: number },
+  pad = 24,
+) {
+  return { scrollX: v.width / (2 * v.zoom) - (bounds.minX + bounds.width / 2), scrollY: pad / v.zoom - bounds.minY };
+}

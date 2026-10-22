@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps,
 import type { WorkflowIR } from "@aif/workflow-ir";
 import { tr, useI18n } from "../i18n";
 import { irToScene, mermaidToScene, type Scene } from "../lib/canvas";
-import { centerScroll, wheelZoomFactor, zoomAt } from "../lib/viewport";
+import { centerScroll, initialView, wheelZoomFactor, zoomAt } from "../lib/viewport";
 import { Excalidraw } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 
@@ -245,7 +245,12 @@ export function CanvasView({
     // 初始化完成后的第一次变化，才缩放到全图：此前 Excalidraw 会把缩放重置为 100%
     if (fitPending.current && apiRef.current) {
       fitPending.current = false;
-      apiRef.current.scrollToContent(undefined, { fitToContent: true });
+      // 不用 scrollToContent：适应全图时图一大就会把字缩得看不清。自己算视图，缩放有下限
+      const bounds = sceneBounds(apiRef.current.getSceneElements() as unknown as MiniElement[]);
+      if (bounds) {
+        const view = initialView(bounds, { width: appState.width, height: appState.height });
+        apiRef.current.updateScene({ appState: { zoom: { value: view.zoom as any }, scrollX: view.scrollX, scrollY: view.scrollY } });
+      }
     }
     const next = { scrollX: appState.scrollX, scrollY: appState.scrollY, zoom: appState.zoom.value, width: appState.width, height: appState.height };
     setViewport((prev) =>
