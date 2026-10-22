@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act } from "react";
+import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { WorkflowIR } from "@aif/workflow-ir";
 import { api, ApiError } from "../lib/api";
@@ -94,6 +94,26 @@ describe("导出 Agent Skill 弹窗", () => {
     await flush();
     expect(ex.zipFiles).toHaveBeenCalledWith(result.files);
     expect(ex.download).toHaveBeenCalledWith(expect.any(Blob), "weekly.skill.zip");
+  });
+
+  it("开发模式（StrictMode）会先卸载再重新挂载：第一次请求被取消后必须重新发起，不能停在进度页", async () => {
+    vi.spyOn(skillExport, "exportSkill").mockImplementation(
+      (_id, _body, _onProgress, signal) =>
+        new Promise((resolve, reject) => {
+          if (signal?.aborted) return reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+          signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+          setTimeout(() => resolve(result), 0);
+        }),
+    );
+    await act(async () =>
+      root.render(
+        <StrictMode>
+          <SkillExportDialog ir={ir} workflowId="wf-1" version={2} onClose={() => {}} />
+        </StrictMode>,
+      ),
+    );
+    await flush();
+    expect(document.querySelector(".ep-code")?.textContent).toBe("# 周报");
   });
 
   it("服务端回退到基础版本时，说明原因", async () => {

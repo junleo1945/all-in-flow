@@ -51,7 +51,14 @@ export function SkillExportDialog({
   const hasAnswers = Object.keys(filled).length > 0;
   const running = stage !== null;
 
-  useEffect(() => () => abort.current?.abort(), []);
+  // 卸载时取消请求，并允许重新挂载后再次自动开始（开发模式的 StrictMode 会先卸载再挂载一次）
+  useEffect(
+    () => () => {
+      abort.current?.abort();
+      started.current = false;
+    },
+    [],
+  );
 
   /** 浏览器内的基础版本：不经过模型 */
   const basic = async (reason?: string) => {
