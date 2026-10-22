@@ -10,6 +10,8 @@ export interface SkillExportBody {
   packaging?: "zip" | "claude-plugin";
   /** 导出前补充、还没有保存为新版本的内容：节点 id → 判断标准或模板 */
   answers?: Record<string, string>;
+  /** 跳过服务端缓存，重新让模型生成（「重新生成」） */
+  refresh?: boolean;
 }
 
 export interface SkillExportResult {
@@ -23,6 +25,10 @@ export interface SkillExportResult {
   /** 是否回退到了基础版本（模型不可用或写得不合格） */
   fallback: boolean;
   fallbackReason?: string;
+  /** 是否直接取自服务端缓存（没有重新调用模型） */
+  cached?: boolean;
+  /** 这份结果的生成时间（ISO） */
+  generatedAt?: string;
 }
 
 /** 让模型撰写 Agent Skill：逐个回调进度，返回最终结果；失败时抛出 */

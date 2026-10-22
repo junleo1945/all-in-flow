@@ -13,6 +13,8 @@ interface Shown {
   files: ExportFile[];
   filename: string;
   notes: string[];
+  /** 来自服务端（模型生成或缓存）的结果才能重新生成；浏览器内的基础版本没有这个选项 */
+  regenerate?: boolean;
 }
 
 /**
@@ -80,7 +82,9 @@ export function SkillExportDialog({
   const fromServer = (r: SkillExportResult): Shown => ({
     files: r.files,
     filename: r.filename,
+    regenerate: true,
     notes: [
+      ...(r.cached ? [t("skillExport.cached", { time: r.generatedAt ? new Date(r.generatedAt).toLocaleString() : "" })] : []),
       ...(r.fallback ? [t("skillExport.fallback", { reason: r.fallbackReason ?? "" })] : []),
       ...r.issues.map((i) => t("exp.warn", { w: ex.issueText(i) })),
       ...r.warnings.map((w) => t("exp.warn", { w })),
@@ -88,7 +92,7 @@ export function SkillExportDialog({
     ],
   });
 
-  const start = async () => {
+  const start = async (refresh = false) => {
     setErr("");
     if (!workflowId) return basic(t("skillExport.localFallback"));
     setStage("analyze");
@@ -96,7 +100,7 @@ export function SkillExportDialog({
     try {
       const r = await exportSkill(
         workflowId,
-        { ...(curVersion ? { version: curVersion } : {}), target: "generic", packaging: "zip", ...(hasAnswers ? { answers: filled } : {}) },
+        { ...(curVersion ? { version: curVersion } : {}), target: "generic", packaging: "zip", ...(hasAnswers ? { answers: filled } : {}), ...(refresh ? { refresh: true } : {}) },
         setStage,
         abort.current.signal,
       );
@@ -152,6 +156,15 @@ export function SkillExportDialog({
           notes: shown.notes,
           downloadLabel: t("exp.downloadZip"),
           onDownload: async () => ex.download(await ex.zipFiles(shown.files), shown.filename),
+          extraAction: shown.regenerate
+            ? {
+                label: t("skillExport.regenerate"),
+                onClick: () => {
+                  setShown(null);
+                  void start(true);
+                },
+              }
+            : undefined,
         }}
         onClose={onClose}
       />
@@ -177,7 +190,7 @@ export function SkillExportDialog({
                 saving={saving}
                 msg={msg}
               />
-              <button className="btn btn-ink" onClick={start}>{err ? t("skillExport.retry") : t("skillExport.start")}</button>
+              <button className="btn btn-ink" onClick={() => void start()}>{err ? t("skillExport.retry") : t("skillExport.start")}</button>
               {err && <button className="btn btn-line" onClick={() => basic()}>{t("skillExport.useBasic")}</button>}
             </>
           )}
