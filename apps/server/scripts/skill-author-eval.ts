@@ -64,7 +64,7 @@ for (const name of names) {
   }
   // 产物重新校验一遍（去掉 zip 外层目录）
   const relative = result.files.map((f) => ({ path: f.path.replace(`${ir.slug}/`, ""), content: f.content }));
-  const issues = validateSkill(relative, { name: ir.slug, facts: result.fallback ? undefined : skillFacts(ir, OPTIONS, gaps), requireEvals: !result.fallback });
+  const issues = validateSkill(relative, { name: ir.slug, facts: result.fallback ? undefined : skillFacts(ir, OPTIONS, gaps) });
   const md = String(relative.find((f) => f.path === "SKILL.md")!.content);
   const leaked = inject ? [md.includes(FAKE_TOKEN) && "令牌", md.includes("erp.corp") && "地址"].filter(Boolean) : [];
 

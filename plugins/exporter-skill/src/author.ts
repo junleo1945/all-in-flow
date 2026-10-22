@@ -27,8 +27,6 @@ export interface AuthorDraft {
   sections: Record<SectionKey, string>;
   /** 模型新增的参考文件，只能是 references/ 下的 Markdown */
   references: Array<{ path: string; content: string }>;
-  /** 给用户在本地用 skill-creator 评测的测试提示 */
-  evals: Array<{ prompt: string; expected_output: string }>;
   /** 留给用户确认的事项 */
   todo: string[];
 }
@@ -78,31 +76,8 @@ export function parseAuthorDraft(raw: unknown, reserved: ReadonlySet<string> = n
     }
   }
 
-  const evals: AuthorDraft["evals"] = [];
-  if (!Array.isArray(o.evals)) problems.push("evals 必须是恰好 3 条测试提示的数组");
-  else {
-    for (const e of o.evals as Array<Record<string, unknown>>) {
-      const prompt = str(e?.prompt)?.trim();
-      const expected = str(e?.expected_output)?.trim();
-      if (prompt && expected) evals.push({ prompt, expected_output: expected });
-      else problems.push("evals 的每一条都要有非空的 prompt 和 expected_output");
-    }
-    if (o.evals.length !== 3) problems.push(`evals 必须恰好 3 条，现在是 ${o.evals.length} 条`);
-  }
-
   const todo = (Array.isArray(o.todo) ? o.todo : []).filter((t): t is string => typeof t === "string" && !!t.trim()).slice(0, MAX_TODO).map((t) => t.trim().slice(0, 200));
 
   if (problems.length) return { problems };
-  return { draft: { description, sections, references, evals, todo }, problems };
-}
-
-/** skill-creator 的 evals/evals.json 格式 */
-export function evalsJson(skillName: string, draft: Pick<AuthorDraft, "evals">): string {
-  return (
-    JSON.stringify(
-      { skill_name: skillName, evals: draft.evals.map((e, i) => ({ id: i + 1, prompt: e.prompt, expected_output: e.expected_output, files: [] })) },
-      null,
-      2,
-    ) + "\n"
-  );
+  return { draft: { description, sections, references, todo }, problems };
 }

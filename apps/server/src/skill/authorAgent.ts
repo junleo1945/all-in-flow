@@ -145,7 +145,7 @@ export function createSkillAuthor(opts: { runtime: ModelRuntime; model: RuntimeM
         }
 
         const { files } = assembleSkill(ir, options, draft);
-        const found = validateSkill(files, { name: ir.slug, facts, requireEvals: true });
+        const found = validateSkill(files, { name: ir.slug, facts });
         const errors = found.filter((i) => i.level === "error");
         const todo = [...draft.todo, ...gaps.filter((g) => !draft.todo.includes(g))];
         last = { files, todo, issues: found };

@@ -12,12 +12,12 @@ import {
 import { collectSteps, buildFacts, type SkillFacts } from "./facts.js";
 import { planScripts, type ScriptPlan, type ScriptPlanResult } from "./scripts.js";
 import { DESCRIPTION_LIMIT, FIRST_PERSON, describesWhenToUse } from "./validate.js";
-import { SECTION_HEADINGS, SECTION_KEYS, evalsJson, type AuthorDraft } from "./author.js";
+import { SECTION_HEADINGS, SECTION_KEYS, type AuthorDraft } from "./author.js";
 
 export { orderSteps, conditionText } from "@aif/workflow-ir";
 export { buildFacts, collectSteps, type SkillFacts, type FactStep } from "./facts.js";
 export { validateSkill, describesWhenToUse, type SkillIssue, type ValidateOptions } from "./validate.js";
-export { parseAuthorDraft, evalsJson, SECTION_KEYS, SECTION_HEADINGS, type AuthorDraft, type SectionKey } from "./author.js";
+export { parseAuthorDraft, SECTION_KEYS, SECTION_HEADINGS, type AuthorDraft, type SectionKey } from "./author.js";
 
 export interface SkillOptions {
   /** 目标 Agent：只影响安装说明，Skill 内容相同 */
@@ -191,7 +191,7 @@ function triggerLine(ir: WorkflowIR): string {
 
 /**
  * 用模型撰写的草稿拼出完整的 Skill（路径相对于根目录）：骨架文件不变，SKILL.md 按固定顺序重新拼装，
- * 另外加入模型新增的 references、evals/evals.json，以及 INSTALL.md 末尾的迭代说明。
+ * 另外加入模型新增的 references。
  */
 export function assembleSkill(ir: WorkflowIR, options: SkillOptions, draft: AuthorDraft): { files: ExportFile[] } & ScriptPlanResult {
   const base = skeleton(ir, options);
@@ -225,20 +225,11 @@ export function assembleSkill(ir: WorkflowIR, options: SkillOptions, draft: Auth
 
   const files = base.files.map((f) => {
     if (f.path === "SKILL.md") return { ...f, content: md };
-    if (f.path === "INSTALL.md") return { ...f, content: `${String(f.content).replace(/\s+$/, "")}\n\n${ITERATE_HINT}\n` };
     return f;
   });
   files.push(...draft.references.map((r) => ({ path: r.path, content: r.content.endsWith("\n") ? r.content : `${r.content}\n` })));
-  files.push({ path: "evals/evals.json", content: evalsJson(ir.slug, draft) });
   return { ...base, files };
 }
-
-const ITERATE_HINT = [
-  "## 继续打磨这个 Skill",
-  "",
-  "`evals/evals.json` 里有 3 条测试提示。想让它更好用，在装有 skill-creator 的 Agent 里打开本目录，说「评测并改进这个 skill」，",
-  "它会用这些提示各跑一轮，对比结果并给出修改建议。",
-].join("\n");
 
 /** 执行步骤的每一行。foreach 的子流程展开成 3.1、3.2……，子流程里的结束语只针对本轮 */
 function stepLines(ir: WorkflowIR, plans: Map<string, ScriptPlan>, prefix = ""): string[] {

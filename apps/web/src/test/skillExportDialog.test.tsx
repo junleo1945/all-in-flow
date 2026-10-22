@@ -25,7 +25,7 @@ const result: skillExport.SkillExportResult = {
   version: 2,
   files: [
     { path: "weekly/SKILL.md", content: "# 周报" },
-    { path: "weekly/evals/evals.json", content: "{}" },
+    { path: "weekly/references/notes.md", content: "# 笔记" },
   ],
   filename: "weekly.skill.zip",
   issues: [{ level: "warning", message: "description 缺少使用时机" }],
@@ -220,5 +220,51 @@ describe("导出 Agent Skill 弹窗", () => {
     expect(signal?.aborted).toBe(false);
     await act(async () => root.unmount());
     expect(signal?.aborted).toBe(true);
+  });
+
+  it("结果取自缓存时说明生成时间；点「重新生成」带 refresh 重新请求，拿到新结果后替换", async () => {
+    const fresh: skillExport.SkillExportResult = { ...result, files: [{ path: "weekly/SKILL.md", content: "# 新周报" }], cached: false };
+    const spy = vi
+      .spyOn(skillExport, "exportSkill")
+      .mockResolvedValueOnce({ ...result, cached: true, generatedAt: "2026-10-20T08:00:00.000Z" })
+      .mockResolvedValueOnce(fresh);
+    await render();
+    expect(document.body.textContent).toContain("没有重新调用模型");
+    expect(document.querySelector(".ep-code")?.textContent).toBe("# 周报");
+
+    await act(async () => button("重新生成").click());
+    await flush();
+    expect(spy).toHaveBeenLastCalledWith("wf-1", { version: 2, target: "generic", packaging: "zip", refresh: true }, expect.any(Function), expect.anything());
+    expect(document.querySelector(".ep-code")?.textContent).toBe("# 新周报");
+    expect(document.body.textContent).not.toContain("没有重新调用模型");
+  });
+
+  it("重新生成进行中显示进度；浏览器内的基础版本没有「重新生成」", async () => {
+    let finish!: (r: skillExport.SkillExportResult) => void;
+    vi.spyOn(skillExport, "exportSkill")
+      .mockResolvedValueOnce(result)
+      .mockImplementationOnce((_id, _body, onProgress) => {
+        onProgress("write");
+        return new Promise((resolve) => (finish = resolve));
+      });
+    await render();
+    await act(async () => button("重新生成").click());
+    await flush();
+    expect(document.querySelector(".ep-code")).toBeNull();
+    expect([...document.querySelectorAll(".n8n-export-steps li")].map((s) => s.className)).toEqual(["done", "now", ""]);
+    await act(async () => finish(result));
+    await flush();
+    expect(document.querySelector(".ep-code")?.textContent).toBe("# 周报");
+
+    // 没有 workflowId：直接用浏览器内的基础版本，不能重新生成
+    act(() => root.unmount());
+    document.body.innerHTML = "";
+    host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+    vi.mocked(ex.buildSkill).mockResolvedValue({ files: result.files, filename: "weekly.skill.zip", warnings: [] } as never);
+    await render({ workflowId: undefined });
+    expect(document.querySelector(".ep-code")).not.toBeNull();
+    expect(document.body.textContent).not.toContain("重新生成");
   });
 });

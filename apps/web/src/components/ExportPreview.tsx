@@ -25,6 +25,8 @@ export interface ExportPreviewSpec {
   onShare?: () => Promise<void> | void;
   /** 文件是提示词文档：默认排成易读的文档，可以切换查看原文；复制和下载仍然是原文 */
   renderDoc?: boolean;
+  /** 底部的次要操作（例如「重新生成」），显示在下载按钮左边 */
+  extraAction?: { label: string; onClick: () => void };
 }
 
 /**
@@ -135,6 +137,7 @@ export function ExportPreview({ spec, onClose, top }: { spec: ExportPreviewSpec;
         <div className="ep-foot">
           {err ? <span className="notice-error">{err}</span> : <span />}
           <span className="ep-actions">
+            {spec.extraAction && <button className="btn btn-line" onClick={spec.extraAction.onClick}>{spec.extraAction.label}</button>}
             {spec.copyPrimary ? (
               <>
                 {spec.onShare && <button className="btn btn-line" disabled={text === null} onClick={share}>{t("exp.share")}</button>}

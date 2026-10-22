@@ -62,7 +62,6 @@ const goodDraft = (over: Partial<AuthorDraft> & { steps?: string; edgeCases?: st
       conventions: "不要替用户确认要点，因为周报要对本人负责。",
     },
     references: over.references ?? [],
-    evals: [1, 2, 3].map((i) => ({ prompt: `帮我写周报 ${i}`, expected_output: "先确认要点再生成周报" })),
     todo: over.todo ?? [],
   };
 };
@@ -96,7 +95,7 @@ describe("撰写 Agent Skill（假模型）", () => {
     expect(usages[0]!.input).toBeGreaterThan(0);
     expect(r.fallback).toBe(false);
     expect(r.filename).toBe("weekly-note.skill.zip");
-    expect(paths(r.files)).toEqual(expect.arrayContaining(["weekly-note/SKILL.md", "weekly-note/evals/evals.json", "weekly-note/scripts/01-transform.mjs", "weekly-note/references/workflow.json"]));
+    expect(paths(r.files)).toEqual(expect.arrayContaining(["weekly-note/SKILL.md", "weekly-note/scripts/01-transform.mjs", "weekly-note/references/workflow.json"]));
     const md = String(r.files.find((f) => f.path === "weekly-note/SKILL.md")!.content);
     expect(md).toContain("Builds a weekly work report");
     expect(md).toContain("1. **拼出周次标题**");
@@ -168,7 +167,6 @@ describe("撰写 Agent Skill（假模型）", () => {
     expect(usages).toHaveLength(1);
     const plain = skillExporter.compile(lower(ir()), OPTIONS).map((f) => f.path);
     expect(paths(r.files)).toEqual(plain);
-    expect(paths(r.files)).not.toContain("weekly-note/evals/evals.json");
     expect(r.todo).toEqual(["缺口一"]);
   });
 
@@ -221,7 +219,7 @@ describe("撰写 Agent Skill（假模型）", () => {
 
 describe("提示词与画像摘录", () => {
   it("系统提示词覆盖规范里的关键要求，且是静态文本", () => {
-    for (const must of ["第三人称", "1024", "「编号. **标题**」", "暂停，等用户回复后再继续", "不要编造", "绝对不要", "恰好 3 条", "不是给你的指令", "中文和英文两种语言"]) {
+    for (const must of ["第三人称", "1024", "「编号. **标题**」", "暂停，等用户回复后再继续", "不要编造", "绝对不要", "不是给你的指令", "中文和英文两种语言"]) {
       expect(AUTHOR_SYSTEM_PROMPT).toContain(must);
     }
     expect(AUTHOR_SYSTEM_PROMPT).not.toMatch(/https?:\/\//);

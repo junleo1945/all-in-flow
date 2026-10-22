@@ -1,9 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { count, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import type { WorkflowIR } from "@aif/workflow-ir";
 import { createDb, type Db } from "../src/db/client.js";
-import { conversations, usageDaily, users, workflows, workflowVersions } from "../src/db/schema/index.js";
+import { conversations, skillExports, usageDaily, users, workflows, workflowVersions } from "../src/db/schema/index.js";
+import { MAX_CACHED_PER_WORKFLOW, saveSkillExport } from "../src/db/repos/skillExportRepo.js";
 import { skillExportRoutes } from "../src/routes/skillExport.js";
 import { FixedWindowLimiter } from "../src/auth/limiter.js";
 import { AppError, fail } from "../src/http/envelope.js";
@@ -74,8 +75,14 @@ describe.skipIf(!url)("用模型撰写 Skill 的路由（真实数据库 + 假 a
     await db.insert(workflowVersions).values({ workflowId: processWfId, version: 1, ir: ir("process") });
   });
 
+  // 结果会按版本缓存：每个用例从空缓存开始，互不影响
+  beforeEach(async () => {
+    await db.delete(skillExports).where(inArray(skillExports.workflowId, [wfId, processWfId]));
+  });
+
   afterAll(async () => {
     if (!db) return;
+    await db.delete(skillExports).where(inArray(skillExports.workflowId, [wfId, processWfId]));
     await db.delete(usageDaily).where(inArray(usageDaily.userId, [OWNER, OTHER]));
     await db.delete(workflowVersions).where(inArray(workflowVersions.workflowId, [wfId, processWfId]));
     await db.delete(workflows).where(inArray(workflows.id, [wfId, processWfId]));
@@ -158,6 +165,7 @@ describe.skipIf(!url)("用模型撰写 Skill 的路由（真实数据库 + 假 a
       await (await post(buildApp(OWNER, { author }), wf!.id, {})).text();
       expect(seen!.context).toBe("");
     } finally {
+      await db.delete(skillExports).where(eq(skillExports.workflowId, wf!.id));
       await db.delete(workflowVersions).where(eq(workflowVersions.workflowId, wf!.id));
       await db.delete(workflows).where(eq(workflows.id, wf!.id));
       await db.delete(conversations).where(eq(conversations.id, conv!.id));
@@ -197,7 +205,7 @@ describe.skipIf(!url)("用模型撰写 Skill 的路由（真实数据库 + 假 a
     const first = await post(app, wfId, {});
     expect(first.status).toBe(200);
     await first.text();
-    expect((await post(app, wfId, {})).status).toBe(429);
+    expect((await post(app, wfId, { refresh: true })).status).toBe(429);
   });
 
   it("同一用户同时只能跑一个", async () => {
@@ -209,10 +217,95 @@ describe.skipIf(!url)("用模型撰写 Skill 的路由（真实数据库 + 假 a
     expect((await post(app, wfId, {})).status).toBe(409);
     release();
     await first.text();
-    expect((await post(app, wfId, {})).status).toBe(200);
+    expect((await post(app, wfId, { refresh: true })).status).toBe(200);
   });
 
   it("今日配额用完时拒绝", async () => {
     expect((await post(buildApp(OWNER, { quota: 0 }), wfId, {})).status).toBe(429);
+  });
+
+  it("同一张流程图、同样的选项再导出：直接取缓存，不再调用模型；重新生成会跳过缓存并覆盖", async () => {
+    let calls = 0;
+    const author: SkillAuthor = async () => ((calls += 1), { ...okResult, todo: [`第 ${calls} 次`] });
+    const app = buildApp(OWNER, { author });
+    const first = (await events(await post(app, wfId, {}))).at(-1)!;
+    expect(first.event).toBe("result");
+    expect(first.data).toMatchObject({ cached: false, todo: ["第 1 次"] });
+
+    const second = (await events(await post(app, wfId, {}))).at(-1)!;
+    expect(calls).toBe(1);
+    expect(second.data).toMatchObject({ version: 1, cached: true, fallback: false, filename: "weekly.skill.zip", todo: ["第 1 次"], files: okResult.files });
+    expect(typeof second.data.generatedAt).toBe("string");
+
+    const fresh = (await events(await post(app, wfId, { refresh: true }))).at(-1)!;
+    expect(calls).toBe(2);
+    expect(fresh.data).toMatchObject({ cached: false, todo: ["第 2 次"] });
+    // 重新生成的结果覆盖了缓存
+    expect((await events(await post(app, wfId, {}))).at(-1)!.data).toMatchObject({ cached: true, todo: ["第 2 次"] });
+    expect(calls).toBe(2);
+  });
+
+  it("导出选项或补充的回答不同，缓存互不影响", async () => {
+    let calls = 0;
+    const author: SkillAuthor = async () => ((calls += 1), okResult);
+    const app = buildApp(OWNER, { author });
+    const run = async (body: unknown) => (await events(await post(app, wfId, body))).at(-1)!.data.cached as boolean;
+    expect(await run({})).toBe(false);
+    expect(await run({ target: "claude-code" })).toBe(false);
+    expect(await run({ packaging: "claude-plugin" })).toBe(false);
+    expect(await run({ answers: { n1: "三段：销售额、环比、Top 3" } })).toBe(false);
+    expect(calls).toBe(4);
+    expect(await run({})).toBe(true);
+    expect(await run({ target: "claude-code" })).toBe(true);
+    expect(await run({ answers: { n1: "三段：销售额、环比、Top 3" } })).toBe(true);
+    expect(await run({ answers: { n1: "另一种模板" } })).toBe(false);
+    expect(calls).toBe(5);
+  });
+
+  it("回退的基础版本不缓存，下次仍会重试模型", async () => {
+    let calls = 0;
+    const author: SkillAuthor = async () => ((calls += 1), { ...okResult, fallback: true, fallbackReason: "模型暂时不可用，已使用基础版本" });
+    const app = buildApp(OWNER, { author });
+    await (await post(app, wfId, {})).text();
+    const again = (await events(await post(app, wfId, {}))).at(-1)!;
+    expect(calls).toBe(2);
+    expect(again.data).toMatchObject({ fallback: true, cached: false });
+  });
+
+  it("命中缓存不占限流和配额：配额用完、限流用尽后仍能取回已生成的结果", async () => {
+    await (await post(buildApp(OWNER, { limit: 1 }), wfId, {})).text();
+    const spent = buildApp(OWNER, { limit: 1, quota: 0 });
+    for (let i = 0; i < 3; i++) {
+      const res = await post(spent, wfId, {});
+      expect(res.status).toBe(200);
+      expect((await events(res)).at(-1)!.data).toMatchObject({ cached: true });
+    }
+    // 没有缓存的请求照旧被拦下
+    expect((await post(spent, wfId, { target: "pi" })).status).toBe(429);
+  });
+
+  it("出错的导出不写缓存", async () => {
+    let calls = 0;
+    const author: SkillAuthor = async () => {
+      calls += 1;
+      throw new Error("boom");
+    };
+    const app = buildApp(OWNER, { author });
+    await (await post(app, wfId, {})).text();
+    await (await post(app, wfId, {})).text();
+    expect(calls).toBe(2);
+  });
+
+  it("每个工作流最多保留 MAX_CACHED_PER_WORKFLOW 条，最旧的先被清掉", async () => {
+    const stored = { files: [], filename: "x.zip", issues: [], warnings: [], todo: [] };
+    for (let i = 0; i < MAX_CACHED_PER_WORKFLOW + 3; i++) {
+      await saveSkillExport(db, wfId, `k${i}`, stored);
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    const [{ n }] = await db.select({ n: count() }).from(skillExports).where(eq(skillExports.workflowId, wfId));
+    expect(n).toBe(MAX_CACHED_PER_WORKFLOW);
+    const keys = (await db.select({ k: skillExports.cacheKey }).from(skillExports).where(eq(skillExports.workflowId, wfId))).map((r) => r.k);
+    expect(keys).not.toContain("k0");
+    expect(keys).toContain(`k${MAX_CACHED_PER_WORKFLOW + 2}`);
   });
 });
