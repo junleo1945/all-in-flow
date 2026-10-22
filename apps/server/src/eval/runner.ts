@@ -1,6 +1,6 @@
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { actionCoverage, executability, validateWorkflow } from "@aif/workflow-ir";
-import { PERSONAS, type Persona, type EvalRun, scoreRun, type RunMetrics } from "@aif/evals";
+import { PERSONAS, type Persona, type EvalRun, scoreRun, countTimeQuestions, type RunMetrics } from "@aif/evals";
 import type { Db } from "../db/client.js";
 import { createConversation, getConversation } from "../db/repos/conversationRepo.js";
 import { createSessionRegistry } from "../agent/registry.js";
@@ -19,6 +19,11 @@ export function userSimPrompt(p: Persona): string {
     "规则：",
     "- 你的真实痛点如下，但只有当顾问问到具体实例（时间、频率、耗时、卡在哪一步）时才透露，不要一次全部说完：",
     hidden,
+    ...(p.cannotEstimate
+      ? [
+          "- 你对每件事要花多久其实没认真算过。顾问问到单次耗时时：如果给了几个档位选项，你可以选一个最接近的；如果要你说具体分钟数、或者问上一次花了多久，你就说“不好说，没算过”。同一件事被追问第二次，你会明显不耐烦，说“真的说不准，别问时间了”。",
+        ]
+      : []),
     "- 每次回复 1 到 3 句话，口语化。",
     "- 不要提及这是模拟或访谈评测。",
     "- 直接输出你要说的话，不加引号或说明。",
@@ -110,7 +115,8 @@ export async function runPersona(opts: EvalOptions, persona: Persona): Promise<P
   // 最终画像从数据库读取，确保评分的是真正保存下来的内容
   const saved = await getConversation(opts.db, opts.evalUserId, conv.id);
   const profile = saved.profile as any;
-  run.painPoints = (profile.painPoints ?? []).map((p: any) => ({ title: p.title, detail: p.detail, score: p.score }));
+  run.painPoints = (profile.painPoints ?? []).map((p: any) => ({ title: p.title, detail: p.detail, score: p.score, assumed: p.assumed }));
+  run.timeQuestions = countTimeQuestions(transcript.filter((m) => m.role === "assistant").map((m) => m.text));
   run.taskCount = (profile.tasks ?? []).length;
 
   registry.dispose(conv.id);

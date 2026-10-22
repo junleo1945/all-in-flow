@@ -23,7 +23,7 @@ import {
 import { workflows } from "../db/schema/index.js";
 import { eq, desc } from "drizzle-orm";
 import type { AppConfig } from "../config.js";
-import { scorePainPoint, type Profile } from "../domain/profile.js";
+import { applyScore, type Profile } from "../domain/profile.js";
 import { saveProfile } from "../db/repos/conversationRepo.js";
 
 export interface ConversationRouteDeps {
@@ -215,7 +215,7 @@ export function conversationRoutes(deps: ConversationRouteDeps) {
       const p = profile.painPoints.find((x) => x.id === patch.id);
       if (!p) continue;
       Object.assign(p, Object.fromEntries(Object.entries(patch).filter(([k, v]) => k !== "id" && v !== undefined)));
-      p.score = scorePainPoint(p, profile.tasks.find((t) => t.id === p.taskId));
+      applyScore(p, profile.tasks.find((t) => t.id === p.taskId));
     }
     await saveProfile(deps.db, id, profile);
     return ok(c, profile);

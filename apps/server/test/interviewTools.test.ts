@@ -88,10 +88,40 @@ describe("访谈工具：快速模式与要点", () => {
     expect(textOf(r)).toContain("emit_workflow");
   });
 
-  it("记录工作后返回进度，告诉模型还差几件完整工作", async () => {
+  it("记录工作后返回进度，告诉模型已记录几件工作", async () => {
     const f = fakeCtx();
     const r = await f.call("record_task", { title: "周总结", frequency: "weekly", minutesPerRun: 240 });
-    expect(textOf(r)).toContain("完整工作 1/3");
+    expect(textOf(r)).toContain("已记录工作 1/3");
+  });
+
+  it("record_task 接受耗时档位；说不准记为 unknown，不需要分钟数", async () => {
+    const f = fakeCtx();
+    await f.call("record_task", { title: "日报", frequency: "daily", durationBucket: "half_hour" });
+    await f.call("record_task", { title: "对账", frequency: "monthly", durationBucket: "unknown" });
+    const [a, b] = f.current().tasks;
+    expect(a).toMatchObject({ durationBucket: "half_hour", minutesPerRun: 30 });
+    expect(b).toMatchObject({ durationBucket: "unknown" });
+    expect(b!.minutesPerRun).toBeUndefined();
+  });
+
+  it("耗时说不准时痛点照样有分数，并告诉模型不必追问", async () => {
+    const f = fakeCtx();
+    const t = await f.call("record_task", { title: "对账", frequency: "monthly", durationBucket: "unknown" });
+    const id = textOf(t).match(/id: ([0-9a-f-]{36})/)![1];
+    const r = await f.call("record_pain_point", { taskId: id, title: "手工匹配", detail: "", severity: 4, automatable: 4 });
+    expect(textOf(r)).toContain("优先级");
+    expect(textOf(r)).toContain("不必为此追问");
+    expect(f.current().painPoints[0]!.assumed).toBe(true);
+  });
+
+  it("痛点没关联上工作项（没填或填成了名称）时，告诉模型原因和补救办法，而不是只说暂不计分", async () => {
+    const f = fakeCtx();
+    await f.call("record_task", { title: "对账", frequency: "monthly", minutesPerRun: 60 });
+    const named = await f.call("record_pain_point", { taskId: "对账", title: "手工匹配", detail: "", severity: 4, automatable: 4 });
+    expect(textOf(named)).toContain("不是工作项的名称");
+    expect(textOf(named)).toContain(f.current().painPoints[0]!.id);
+    const none = await f.call("record_pain_point", { title: "没关联", detail: "", severity: 4, automatable: 4 });
+    expect(textOf(none)).toContain("还没有关联工作项");
   });
 });
 
@@ -107,10 +137,28 @@ describe("状态块", () => {
     const block = buildTurnContext(p, "inventory");
     expect(block.startsWith("<aif-context>")).toBe(true);
     expect(block).toContain("阶段：inventory");
-    expect(block).toContain("完整 1/3");
-    expect(block).toContain("周总结｜每周｜240分钟");
+    expect(block).toContain("已记录工作（1/3）");
+    expect(block).toContain("周总结｜每周｜耗时 240分钟");
     expect(block).toContain("已确认：works 无导出");
     expect(block).toContain("不要再问");
+  });
+
+  it("状态块不再催耗时：没有耗时不写「缺」，说不准的明确标出不要再问，未量化的分数有说明", () => {
+    const p = normalizeProfile({
+      tasks: [
+        { id: "t1", title: "日报", frequency: "daily", steps: [], systems: [] },
+        { id: "t2", title: "对账", frequency: "monthly", durationBucket: "unknown", steps: [], systems: [] },
+        { id: "t3", title: "周报", frequency: "weekly", durationBucket: "hours", minutesPerRun: 90, steps: [], systems: [] },
+      ],
+      painPoints: [{ id: "p1", taskId: "t2", title: "手工匹配", detail: "", severity: 3, automatable: 3, score: 67.5, assumed: true }],
+    });
+    const block = buildTurnContext(p, "dig");
+    expect(block).not.toContain("缺耗时");
+    expect(block).not.toContain("完整");
+    expect(block).toContain("日报｜每天｜耗时 未记录");
+    expect(block).toContain("对账｜每月｜耗时 说不准（按默认值估算，不要再问）");
+    expect(block).toContain("周报｜每周｜耗时 一两个小时");
+    expect(block).toContain("优先级 67.5（耗时待确认，按默认值估算）");
   });
 
   it("快速模式下写明下一步：没有方案时调用 propose_workflows", () => {

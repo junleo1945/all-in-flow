@@ -1,4 +1,4 @@
-import { FREQ_PER_WEEK, MIN_TASKS_FOR_PLAN, isTaskComplete, type Profile } from "../domain/profile.js";
+import { DURATION_BUCKETS, FREQ_PER_WEEK, MIN_TASKS_FOR_PLAN, type Profile, type Task } from "../domain/profile.js";
 import type { Stage } from "./tools.js";
 
 export const CONTEXT_OPEN = "<aif-context>";
@@ -10,6 +10,13 @@ const FREQ_TEXT: Record<keyof typeof FREQ_PER_WEEK, string> = {
   monthly: "每月",
   ad_hoc: "不定期",
 };
+
+/** 状态块里的耗时：说不准的明确标出，模型就不会再追问 */
+function durationText(t: Task): string {
+  if (t.durationBucket === "unknown") return "说不准（按默认值估算，不要再问）";
+  if (t.durationBucket) return DURATION_BUCKETS[t.durationBucket].label;
+  return t.minutesPerRun !== undefined ? `${t.minutesPerRun}分钟` : "未记录";
+}
 
 /** 快速模式下模型下一步该做什么：没有方案就出方案，已有方案就直接生成 */
 export function fastTrackNextStep(profile: Profile): string {
@@ -27,13 +34,11 @@ export function buildTurnContext(profile: Profile, stage: Stage): string {
   const lines: string[] = [];
   lines.push(`阶段：${stage}`);
 
-  const complete = profile.tasks.filter(isTaskComplete);
-  lines.push(`已记录工作（完整 ${complete.length}/${MIN_TASKS_FOR_PLAN}）：`);
+  lines.push(`已记录工作（${profile.tasks.length}/${MIN_TASKS_FOR_PLAN}）：`);
   if (profile.tasks.length === 0) lines.push("- 暂无");
   for (const t of profile.tasks) {
-    const minutes = t.minutesPerRun === undefined ? "缺耗时" : `${t.minutesPerRun}分钟`;
     const systems = t.systems.length ? `｜系统 ${t.systems.join("、")}` : "";
-    lines.push(`- ${t.title}｜${FREQ_TEXT[t.frequency]}｜${minutes}${systems}`);
+    lines.push(`- ${t.title}｜${FREQ_TEXT[t.frequency]}｜耗时 ${durationText(t)}${systems}`);
   }
 
   if (profile.painPoints.length) {
@@ -41,7 +46,7 @@ export function buildTurnContext(profile: Profile, stage: Stage): string {
     for (const p of profile.painPoints) {
       const task = profile.tasks.find((t) => t.id === p.taskId);
       const where = task ? `（工作：${task.title}）` : "（未关联工作）";
-      const score = p.score === null ? "" : `｜优先级 ${p.score}`;
+      const score = p.score === null ? "" : `｜优先级 ${p.score}${p.assumed ? "（耗时待确认，按默认值估算）" : ""}`;
       lines.push(`- ${p.title}${where}${score}`);
     }
   }

@@ -68,6 +68,11 @@ const PAIRS: Pair[] = [
   ["share.notFound", "分享不存在", "Share not found"],
   ["share.gone", "分享已失效", "This share is no longer available"],
   ["share.loginRequired", "请先登录后查看", "Please sign in to view this"],
+
+  ["token.badParams", "令牌名称不能为空，且不超过 60 个字", "The token name cannot be empty and must be at most 60 characters"],
+  ["token.tooMany", "操作过于频繁，请稍后再试", "Too many requests. Please try again later"],
+  ["token.limit", "最多同时保留 {n} 个有效令牌，请先撤销不用的", "You can keep at most {n} active tokens. Please revoke one you no longer use"],
+  ["token.notFound", "令牌不存在或已撤销", "Token not found or already revoked"],
 ];
 
 export const messages: { zh: Record<string, string>; en: Record<string, string> } = {

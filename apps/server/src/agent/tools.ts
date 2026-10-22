@@ -1,7 +1,7 @@
 import { Type } from "typebox";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { WorkflowIR } from "@aif/workflow-ir";
-import { MAX_NOTES, progressLine, upsertPainPoint, upsertTask, type Candidate, type Profile } from "../domain/profile.js";
+import { DURATION_BUCKETS, DURATION_KEYS, MAX_NOTES, progressLine, upsertPainPoint, upsertTask, type Candidate, type Profile } from "../domain/profile.js";
 import { randomUUID } from "node:crypto";
 import type { GeneratedWorkflow } from "./irGenerator.js";
 import { fastTrackNextStep } from "./turnContext.js";
@@ -40,6 +40,19 @@ const Frequency = Type.Union([
   Type.Literal("monthly"),
   Type.Literal("ad_hoc"),
 ]);
+
+/** 耗时档位：用户在选择题里选的档，说不准填 unknown */
+const DurationBucket = Type.Union(
+  DURATION_KEYS.map((k) => Type.Literal(k)),
+  {
+    description:
+      "用户选的单次耗时档位：" +
+      Object.entries(DURATION_BUCKETS)
+        .map(([k, b]) => `${k}=${b.label}`)
+        .join("，") +
+      "，unknown=说不准（问过但用户说不准，之后不要再问）",
+  },
+);
 
 const Score = Type.Integer({ minimum: 1, maximum: 5, description: "1 到 5 的整数" });
 
@@ -89,11 +102,13 @@ export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
   const recordTask = {
     name: "record_task",
     label: "记录工作",
-    description: "新增或更新用户做的一件工作。提供 id 则更新已有工作。minutesPerRun 是单次耗时（分钟），不确定时不要猜。",
+    description:
+      "新增或更新用户做的一件工作。提供 id 则更新已有工作。单次耗时：用户选了档位就填 durationBucket；用户直接说出了分钟数才填 minutesPerRun；用户说不准就填 durationBucket=unknown。不确定时不要猜，也不要为了耗时反复追问。",
     parameters: Type.Object({
       id: Type.Optional(Type.String()),
       title: Type.String(),
       frequency: Frequency,
+      durationBucket: Type.Optional(DurationBucket),
       minutesPerRun: Type.Optional(Type.Number({ minimum: 0 })),
       steps: Type.Optional(Type.Array(Type.String())),
       systems: Type.Optional(Type.Array(Type.String())),
@@ -116,7 +131,7 @@ export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
     description: "新增或更新一个痛点。severity 是痛苦程度，automatable 是可自动化程度，都是 1 到 5。evidence 写明依据（用户原话或具体事例）。",
     parameters: Type.Object({
       id: Type.Optional(Type.String()),
-      taskId: Type.Optional(Type.String()),
+      taskId: Type.Optional(Type.String({ description: "所属工作项的 id，即 record_task 返回的 id，不是工作项的名称" })),
       title: Type.String(),
       detail: Type.String(),
       severity: Score,
@@ -131,7 +146,12 @@ export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
         return { point: pt, progress: progressLine(profile) };
       });
       ctx.emit("state_patch", { painPoint: point });
-      const score = point.score === null ? "耗时未知，暂不计分" : `优先级 ${point.score}`;
+      if (point.score === null) {
+        // 没有关联到工作项就算不出分数：把原因和补救办法告诉模型，让它用正确的 id 重新记录
+        const why = p.taskId ? "taskId 找不到对应的工作项（要用 record_task 返回的 id，不是工作项的名称）" : "还没有关联工作项";
+        return text(`已记录痛点：${point.title}，但${why}，暂不计分。请用 record_task 返回的 id 作为 taskId，带上这个痛点的 id（${point.id}）再记录一次。${progress}`);
+      }
+      const score = point.assumed ? `优先级 ${point.score}，耗时待确认，暂按默认值估算，不必为此追问用户` : `优先级 ${point.score}`;
       return text(`已记录痛点：${point.title}（${score}）。${progress}`);
     },
   };

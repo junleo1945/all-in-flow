@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import LoginPage from "./pages/Login";
 import HomePage from "./pages/Home";
+import LocalSkillPage from "./pages/LocalSkill";
 import { useI18n } from "./i18n";
 
 // 工作台和分享页包含画布（Excalidraw），按需加载，登录页不需要它
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/c/:id" element={<WorkspaceRoute />} />
         <Route path="/s/:token" element={<SharePage />} />
+        <Route path="/skill" element={<LocalSkillPage />} />
         <Route path="/mermaid" element={<MermaidPreviewPage />} />
         <Route path="*" element={<Navigate to="/" replace state={{ from: loc.pathname }} />} />
       </Routes>

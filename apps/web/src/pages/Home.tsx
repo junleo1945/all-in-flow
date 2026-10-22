@@ -127,6 +127,11 @@ export default function HomePage() {
             <div className="muted" style={{ marginTop: 8 }}>{t("home.resetDaily")}</div>
           </div>
           <div className="card side-card">
+            <h3>{t("skill.homeCardTitle")}</h3>
+            <div className="muted" style={{ marginBottom: 10 }}>{t("skill.homeCardDesc")}</div>
+            <button type="button" className="btn btn-line" onClick={() => nav("/skill")}>{t("skill.homeCardOpen")}</button>
+          </div>
+          <div className="card side-card">
             <h3>{t("home.myWorkflows")}</h3>
             {wfs.length === 0 && <div className="empty" style={{ padding: 0 }}>{t("home.noWorkflows")}</div>}
             <ul className="list">

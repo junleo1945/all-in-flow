@@ -5,7 +5,7 @@ import { createDb, type Db } from "../src/db/client.js";
 import { users, conversations, sessionEntries, usageDaily, workflows, workflowVersions } from "../src/db/schema/index.js";
 import { eq } from "drizzle-orm";
 import { PERSONAS } from "@aif/evals";
-import { runPersona, USER_SIM_MARKER } from "../src/eval/runner.js";
+import { runPersona, userSimPrompt, USER_SIM_MARKER } from "../src/eval/runner.js";
 import { salesReport } from "./fixtures.js";
 
 const url = process.env.DATABASE_URL;
@@ -80,4 +80,19 @@ describe.skipIf(!url)("评测运行器（假模型：Agent 与模拟用户共用
     expect(result.metrics.recalledIds).toContain("sa1");
     expect(result.metrics.recall).toBeGreaterThan(0);
   }, 20000);
+});
+
+describe("模拟用户的提示词", () => {
+  it("「说不清耗时」的人设会被要求：给档位就选，要分钟数就说不好说，被追问会不耐烦", () => {
+    const vague = PERSONAS.find((p) => p.cannotEstimate)!;
+    const prompt = userSimPrompt(vague);
+    expect(prompt).toContain(USER_SIM_MARKER);
+    expect(prompt).toContain("不好说，没算过");
+    expect(prompt).toContain("别问时间了");
+  });
+
+  it("普通人设的提示词里没有这条规则", () => {
+    const normal = PERSONAS.find((p) => !p.cannotEstimate)!;
+    expect(userSimPrompt(normal)).not.toContain("不好说，没算过");
+  });
 });
