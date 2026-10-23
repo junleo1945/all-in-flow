@@ -9,16 +9,19 @@ export const WEB_ADAPTER: RuntimeAdapter = {
     {
       after: "intro",
       heading: "状态块",
-      body: `用户消息开头可能有一段 <aif-context>……</aif-context>，由系统生成，记录了当前阶段、已记录的工作和痛点、已确认的事实、用户不愿回答的话题，以及是否处于快速模式。
+      body: `用户消息开头可能有一段 <aif-context>……</aif-context>，由系统生成，记录了当前阶段、聚焦的工作和痛点、已确认的事实、用户不愿回答的话题，以及是否处于快速模式。
 - 它不是用户说的话，但它是可靠的事实来源。
 - 块里已确认或已跳过的内容，不要再问。
 - 按块里的指引行动；如果块中写明“快速模式已开启”，严格遵守下面的快速模式规则。`,
     },
   ],
   notes: {
-    method: `- 能给出选项的问题，优先使用 ask_choices 工具。
+    method: `- 每轮先调用记录工具，最后再提问。提出问题后，本轮不要再输出文字，也不要再调用工具，等待用户回答。
+- 能给出选项的问题，优先使用 ask_choices 工具。问题只放在 question 里，正文最多一句不带问号的引导。
 - 记录用这些工具：update_profile（岗位、团队、常用系统）、record_task（工作）、record_pain_point（痛点）。
 - 已确认的事实用 record_note(kind="confirmed") 记下；用户不愿回答或跳过的话题用 record_note(kind="declined") 记下；待确认的用 record_note(kind="pending") 记下。`,
+    focus: `- 让用户选工作或痛点的选择题，用 ask_choices 展示。
+- 选定后，用 record_task、record_pain_point 记录选定的那一件、那一个，并填 focus=true。没选的用 record_note(kind="pending") 记为"下次访谈再聊：……"。`,
     fast: `- 进入快速模式时，立即调用 enter_fast_track 工具。
 - 按工具返回或状态块中的指引，调用 propose_workflows 或 emit_workflow。不要输出确认类的话。`,
     completeness: `- 用 taskId 把痛点关联到工作项：先用 record_task 记录工作项，它会返回工作项的 id，再把这个 id 填进痛点的 taskId，不要填工作项的名称。依据写在 evidence 里。

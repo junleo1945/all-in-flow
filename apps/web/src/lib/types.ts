@@ -60,7 +60,7 @@ export interface Profile {
   fastTrack?: boolean;
 }
 
-const STAGE_KEYS = ["role", "inventory", "dig", "rank", "propose", "generate"] as const;
+const STAGE_KEYS = ["role", "focus", "dig", "propose", "generate"] as const;
 
 /** 访谈阶段列表（标签按当前语言取，不能在模块顶层缓存） */
 export function stageLabels(): Array<{ key: string; label: string }> {

@@ -2,6 +2,19 @@ import { randomUUID } from "node:crypto";
 
 export type Frequency = "daily" | "weekly" | "monthly" | "ad_hoc";
 
+/** 访谈阶段，按推进顺序 */
+export const STAGES = ["role", "focus", "dig", "propose", "generate"] as const;
+export type Stage = (typeof STAGES)[number];
+
+/** 改成「一次访谈只聚焦一件工作」之前的阶段：盘点工作对应选定工作，量化排序并进深挖 */
+const LEGACY_STAGES: Record<string, Stage> = { inventory: "focus", rank: "dig" };
+
+/** 数据库里存的阶段可能是旧的取值，读出来时换成现在的阶段 */
+export function normalizeStage(stage: string): Stage {
+  if ((STAGES as readonly string[]).includes(stage)) return stage as Stage;
+  return LEGACY_STAGES[stage] ?? "role";
+}
+
 /**
  * 单次耗时的选项：让用户选档，不让他报分钟数（多数人说不准具体分钟）。
  * minutes 是打分时用的代表值。
@@ -88,10 +101,11 @@ export interface Profile {
   notes: Note[];
   /** 用户要求直接出结果后置为 true，之后整个会话不再追问 */
   fastTrack: boolean;
+  /** 本次访谈聚焦的工作和痛点（用户选定的那一个）；没有设置时，只记录了一件、一个的就是它 */
+  focusTaskId?: string;
+  focusPainPointId?: string;
 }
 
-/** 记录的工作达到这个数量、痛点也同样多时，信息就比较充分，可以进入方案 */
-export const MIN_TASKS_FOR_PLAN = 3;
 export const MAX_NOTES = 40;
 
 export const emptyProfile = (): Profile => ({
@@ -108,8 +122,24 @@ export function normalizeProfile(raw: Partial<Profile> | null | undefined): Prof
   return { ...emptyProfile(), ...(raw ?? {}) } as Profile;
 }
 
+/**
+ * 本次访谈聚焦的工作和痛点：用户选定过的优先；没选定过时，只记录了一件工作、一个痛点的就是它。
+ * 记录了好几件却没有选定，说明还要请用户挑一个，此时返回空。
+ */
+export function focusOf(profile: Profile): { task?: Task; painPoint?: PainPoint } {
+  const task = profile.tasks.find((t) => t.id === profile.focusTaskId) ?? (profile.tasks.length === 1 ? profile.tasks[0] : undefined);
+  // 聚焦工作下还没有痛点时，没关联上工作项的痛点也算它的；关联到别的工作的不算
+  const linked = task ? profile.painPoints.filter((p) => p.taskId === task.id) : profile.painPoints;
+  const unlinked = profile.painPoints.filter((p) => !profile.tasks.some((t) => t.id === p.taskId));
+  const ofTask = linked.length ? linked : unlinked;
+  const painPoint =
+    profile.painPoints.find((p) => p.id === profile.focusPainPointId) ?? (ofTask.length === 1 ? ofTask[0] : undefined);
+  return { task, painPoint };
+}
+
 export function progressLine(profile: Profile): string {
-  return `进度：已记录工作 ${profile.tasks.length}/${MIN_TASKS_FOR_PLAN}，痛点 ${profile.painPoints.length}，已记录要点 ${profile.notes.length}。`;
+  const { task, painPoint } = focusOf(profile);
+  return `进度：聚焦工作 ${task ? `「${task.title}」` : "未选定"}，聚焦痛点 ${painPoint ? `「${painPoint.title}」` : "未选定"}，已记录要点 ${profile.notes.length}。`;
 }
 
 /**

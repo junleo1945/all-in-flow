@@ -65,6 +65,7 @@ export async function buildContainer(config: AppConfig, overrides: { agentModel?
     db,
     runtime,
     agentModel,
+    thinkingLevel: config.agentThinkingLevel,
     generateIr,
     askImage: visionEnabled ? (userId, conversationId, attachmentId, question) => attachments.ask(userId, conversationId, attachmentId, question) : undefined,
   });

@@ -5,6 +5,8 @@ export interface EvalRun {
   personaId: string;
   /** 访谈结束时的画像 */
   painPoints: Array<{ title: string; detail: string; score: number | null; /** 耗时待确认，分数是按默认耗时估算的 */ assumed?: boolean }>;
+  /** 访谈最终聚焦的痛点；没有选定时为 undefined */
+  focusPainPoint?: { title: string; detail: string };
   /** 画像中记录的工作项数量 */
   taskCount: number;
   /** 进行了几轮用户发言 */
@@ -15,8 +17,8 @@ export interface EvalRun {
   firstWorkflowTurn?: number;
   /** 第几轮首次提出方案；没有则为 undefined */
   firstProposeTurn?: number;
-  /** 提出方案时已记录的工作项数量（用于判断是否过早下结论） */
-  tasksAtFirstPropose?: number;
+  /** 提出方案时已记录的痛点数量（用于判断是否过早下结论） */
+  painPointsAtFirstPropose?: number;
   /** 用户要求直接出结果（快速模式）。此时提前出方案是用户的选择，不算过早下结论 */
   fastTrack?: boolean;
   /** 生成的每个工作流是否通过 IR 校验 */
@@ -32,10 +34,12 @@ export interface EvalRun {
 
 export interface RunMetrics {
   personaId: string;
-  /** 痛点召回率：识别出的隐藏痛点 ÷ 人设中的隐藏痛点总数 */
-  recall: number;
-  recalledIds: string[];
-  missedIds: string[];
+  /** 聚焦命中：最终聚焦的痛点是人设里真实存在的隐藏痛点之一 */
+  focusHit: boolean;
+  /** 命中的隐藏痛点 id；没有命中时为 null */
+  focusedId: string | null;
+  /** 一次访谈只该记录一件工作：多记录的工作件数，说明访谈发散了 */
+  extraTasks: number;
   /** 量化完整度：有分数的痛点占比。耗时说不准时按默认耗时估算也算有分数 */
   quantified: number;
   /** 耗时已知：有分数且分数不是按默认耗时估算的痛点占比 */
@@ -46,7 +50,7 @@ export interface RunMetrics {
   turnsToWorkflow: number | null;
   /** IR 合法率；未生成工作流则为 null */
   irValidRate: number | null;
-  /** 盘点阶段还没结束就提出方案 */
+  /** 还没挖出痛点就提出方案 */
   prematureConclusion: boolean;
   /** action 覆盖率的平均值；没有生成工作流则为 null */
   actionCoverage: number | null;
@@ -56,23 +60,16 @@ export interface RunMetrics {
   unsafeCodeSteps: number;
 }
 
-/** 与设计文档一致：盘点阶段至少记录 3 件工作才算结束 */
-export const MIN_TASKS_BEFORE_PROPOSE = 3;
-
 function containsAny(text: string, keywords: string[]): boolean {
   const t = text.toLowerCase();
   return keywords.some((k) => t.includes(k.toLowerCase()));
 }
 
 export function scoreRun(persona: Persona, run: EvalRun): RunMetrics {
-  const recalledIds: string[] = [];
-  const missedIds: string[] = [];
-  for (const hp of persona.hiddenPainPoints) {
-    const hit = run.painPoints.some((p) => containsAny(`${p.title} ${p.detail}`, hp.keywords));
-    (hit ? recalledIds : missedIds).push(hp.id);
-  }
-  const total = persona.hiddenPainPoints.length;
-  const recall = total === 0 ? 0 : recalledIds.length / total;
+  const focus = run.focusPainPoint;
+  const focusedId = focus
+    ? (persona.hiddenPainPoints.find((hp) => containsAny(`${focus.title} ${focus.detail}`, hp.keywords))?.id ?? null)
+    : null;
 
   const quantified = run.painPoints.length === 0 ? 0 : run.painPoints.filter((p) => p.score !== null).length / run.painPoints.length;
   const timeKnown = run.painPoints.length === 0 ? 0 : run.painPoints.filter((p) => p.score !== null && !p.assumed).length / run.painPoints.length;
@@ -81,7 +78,7 @@ export function scoreRun(persona: Persona, run: EvalRun): RunMetrics {
     run.workflowValidity.length === 0 ? null : run.workflowValidity.filter(Boolean).length / run.workflowValidity.length;
 
   const prematureConclusion =
-    !run.fastTrack && run.firstProposeTurn !== undefined && (run.tasksAtFirstPropose ?? 0) < MIN_TASKS_BEFORE_PROPOSE;
+    !run.fastTrack && run.firstProposeTurn !== undefined && (run.painPointsAtFirstPropose ?? 0) === 0;
 
   const coverage = run.actionCoverage ?? [];
   const actionCoverage = coverage.length === 0 ? null : avg(coverage)!;
@@ -93,9 +90,9 @@ export function scoreRun(persona: Persona, run: EvalRun): RunMetrics {
 
   return {
     personaId: persona.id,
-    recall,
-    recalledIds,
-    missedIds,
+    focusHit: focusedId !== null,
+    focusedId,
+    extraTasks: Math.max(0, run.taskCount - 1),
     quantified,
     timeKnown,
     timeQuestions: run.timeQuestions ?? null,
@@ -110,7 +107,10 @@ export function scoreRun(persona: Persona, run: EvalRun): RunMetrics {
 
 export interface Summary {
   runs: number;
-  recall: number;
+  /** 聚焦命中的人设占比 */
+  focusRate: number;
+  /** 平均多记录了几件工作 */
+  extraTasks: number;
   quantified: number;
   timeKnown: number;
   /** 每次访谈平均有几条回复在问耗时 */
@@ -132,7 +132,8 @@ export function summarize(metrics: RunMetrics[]): Summary {
   const valid = metrics.map((m) => m.irValidRate).filter((x): x is number => x !== null);
   return {
     runs: metrics.length,
-    recall: avg(metrics.map((m) => m.recall)) ?? 0,
+    focusRate: metrics.length ? metrics.filter((m) => m.focusHit).length / metrics.length : 0,
+    extraTasks: avg(metrics.map((m) => m.extraTasks)) ?? 0,
     quantified: avg(metrics.map((m) => m.quantified)) ?? 0,
     timeKnown: avg(metrics.map((m) => m.timeKnown)) ?? 0,
     timeQuestions: avg(metrics.map((m) => m.timeQuestions).filter((x): x is number => x !== null)),
@@ -151,7 +152,8 @@ export function compare(current: Summary, baseline: Summary) {
   // 旧的基线文件里没有新增的指标（值为 undefined），按没有对比处理
   const delta = (a: number | null | undefined, b: number | null | undefined) => (a == null || b == null ? null : a - b);
   return {
-    recall: delta(current.recall, baseline.recall),
+    focusRate: delta(current.focusRate, baseline.focusRate),
+    extraTasks: delta(current.extraTasks, baseline.extraTasks),
     quantified: delta(current.quantified, baseline.quantified),
     timeKnown: delta(current.timeKnown, baseline.timeKnown),
     timeQuestions: delta(current.timeQuestions, baseline.timeQuestions),
@@ -169,12 +171,12 @@ export function toMarkdown(metrics: RunMetrics[], summary: Summary): string {
   const pct = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)}%`);
   const num = (x: number | null) => (x === null ? "—" : x.toFixed(1));
   const lines = [
-    "| 人设 | 痛点召回 | 量化完整度 | 耗时已知 | 追问耗时 | 生成前轮数 | IR 合法率 | action 覆盖率 | 描述式整理 | 过早下结论 |",
-    "|---|---|---|---|---|---|---|---|---|---|",
+    "| 人设 | 聚焦命中 | 多记的工作 | 量化完整度 | 耗时已知 | 追问耗时 | 生成前轮数 | IR 合法率 | action 覆盖率 | 描述式整理 | 过早下结论 |",
+    "|---|---|---|---|---|---|---|---|---|---|---|",
     ...metrics.map(
-      (m) => `| ${m.personaId} | ${pct(m.recall)} | ${pct(m.quantified)} | ${pct(m.timeKnown)} | ${m.timeQuestions ?? "—"} | ${m.turnsToWorkflow ?? "未生成"} | ${pct(m.irValidRate)} | ${pct(m.actionCoverage)} | ${pct(m.descriptiveTransformRate)} | ${m.prematureConclusion ? "是" : "否"} |`,
+      (m) => `| ${m.personaId} | ${m.focusedId ?? "未命中"} | ${m.extraTasks} | ${pct(m.quantified)} | ${pct(m.timeKnown)} | ${m.timeQuestions ?? "—"} | ${m.turnsToWorkflow ?? "未生成"} | ${pct(m.irValidRate)} | ${pct(m.actionCoverage)} | ${pct(m.descriptiveTransformRate)} | ${m.prematureConclusion ? "是" : "否"} |`,
     ),
-    `| **平均** | **${pct(summary.recall)}** | **${pct(summary.quantified)}** | **${pct(summary.timeKnown)}** | **${num(summary.timeQuestions)}** | **${num(summary.turnsToWorkflow)}** | **${pct(summary.irValidRate)}** | **${pct(summary.actionCoverage)}** | **${pct(summary.descriptiveTransformRate)}** | **${pct(summary.prematureRate)}** |`,
+    `| **平均** | **${pct(summary.focusRate)}** | **${num(summary.extraTasks)}** | **${pct(summary.quantified)}** | **${pct(summary.timeKnown)}** | **${num(summary.timeQuestions)}** | **${num(summary.turnsToWorkflow)}** | **${pct(summary.irValidRate)}** | **${pct(summary.actionCoverage)}** | **${pct(summary.descriptiveTransformRate)}** | **${pct(summary.prematureRate)}** |`,
   ];
   return lines.join("\n");
 }

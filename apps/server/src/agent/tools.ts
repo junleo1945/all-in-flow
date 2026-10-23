@@ -1,13 +1,12 @@
 import { Type } from "typebox";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { WorkflowIR } from "@aif/workflow-ir";
-import { DURATION_BUCKETS, DURATION_KEYS, MAX_NOTES, progressLine, upsertPainPoint, upsertTask, type Candidate, type Profile } from "../domain/profile.js";
+import { DURATION_BUCKETS, DURATION_KEYS, MAX_NOTES, STAGES, progressLine, upsertPainPoint, upsertTask, type Candidate, type PainPoint, type Profile, type Stage } from "../domain/profile.js";
 import { randomUUID } from "node:crypto";
 import type { GeneratedWorkflow } from "./irGenerator.js";
 import { fastTrackNextStep } from "./turnContext.js";
 
-export const STAGES = ["role", "inventory", "dig", "rank", "propose", "generate"] as const;
-export type Stage = (typeof STAGES)[number];
+export { STAGES, type Stage };
 
 export type EventSink = (event: string, data: unknown) => void;
 
@@ -28,9 +27,10 @@ export interface ToolContext {
   askImage?: (attachmentId: string, question: string) => Promise<string>;
 }
 
-const text = (t: string, opts: { terminate?: boolean } = {}) => ({
+/** retry：结果要求模型重新调用一次（例如痛点没关联上工作项），本轮不能就此结束 */
+const text = (t: string, opts: { terminate?: boolean; retry?: boolean } = {}) => ({
   content: [{ type: "text" as const, text: t }],
-  details: {},
+  details: opts.retry ? { retry: true } : {},
   ...(opts.terminate ? { terminate: true } : {}),
 });
 
@@ -56,11 +56,28 @@ const DurationBucket = Type.Union(
 
 const Score = Type.Integer({ minimum: 1, maximum: 5, description: "1 到 5 的整数" });
 
+/** 带 id 更新时只传要改的字段：没传的沿用已有的值。去掉值为 undefined 的键，免得覆盖已有的值 */
+function defined<T extends object>(o: T): Partial<T> {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
+}
+
+/** 新建时缺必填字段：说清楚是新建还是 id 没找到，让模型知道该怎么补 */
+function missingFields(kind: string, id: string | undefined, fields: string[]): Error {
+  const why = id ? `找不到 id 为 ${id} 的${kind}（要用记录时返回的 id），按新建处理` : `新建${kind}`;
+  return new Error(`${why}时必须填写 ${fields.join("、")}。更新已有的${kind}时带上它的 id，只传要改的字段即可。`);
+}
+
+const Focus = Type.Optional(Type.Boolean({ description: "这就是用户选定、本次访谈要深挖的那一个时填 true" }));
+
+/** 记录工具的参数：新建要填全，带 id 更新时只传要改的字段 */
+type TaskPatch = Omit<Parameters<typeof upsertTask>[1], "title" | "frequency"> & Partial<Pick<Parameters<typeof upsertTask>[1], "title" | "frequency">>;
+type PainPointPatch = { id?: string } & Partial<Omit<PainPoint, "id" | "score" | "assumed">>;
+
 export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
   const setStage = {
     name: "set_stage",
     label: "切换阶段",
-    description: "同步当前访谈阶段。顺序：role → inventory → dig → rank → propose → generate。",
+    description: `同步当前访谈阶段。顺序：${STAGES.join(" → ")}。`,
     parameters: Type.Object({ stage: Type.Union(STAGES.map((s) => Type.Literal(s))) }),
     execute: async (_id: string, p: { stage: Stage }) => {
       await ctx.withLock(async () => {
@@ -103,24 +120,30 @@ export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
     name: "record_task",
     label: "记录工作",
     description:
-      "新增或更新用户做的一件工作。提供 id 则更新已有工作。单次耗时：用户选了档位就填 durationBucket；用户直接说出了分钟数才填 minutesPerRun；用户说不准就填 durationBucket=unknown。不确定时不要猜，也不要为了耗时反复追问。",
+      "新增或更新用户做的一件工作。本次访谈只记录用户选定要深挖的那一件。新建时必须填 title 和 frequency；提供 id 则更新已有工作，只传要改的字段，其余沿用已有的值。单次耗时：用户选了档位就填 durationBucket；用户直接说出了分钟数才填 minutesPerRun；用户说不准就填 durationBucket=unknown。不确定时不要猜，也不要为了耗时反复追问。",
     parameters: Type.Object({
       id: Type.Optional(Type.String()),
-      title: Type.String(),
-      frequency: Frequency,
+      title: Type.Optional(Type.String()),
+      frequency: Type.Optional(Frequency),
       durationBucket: Type.Optional(DurationBucket),
       minutesPerRun: Type.Optional(Type.Number({ minimum: 0 })),
       steps: Type.Optional(Type.Array(Type.String())),
       systems: Type.Optional(Type.Array(Type.String())),
+      focus: Focus,
     }),
-    execute: async (_id: string, p: Parameters<typeof upsertTask>[1]) => {
+    execute: async (_id: string, { focus, ...p }: TaskPatch & { focus?: boolean }) => {
       const { task, progress } = await ctx.withLock(async () => {
         const profile = await ctx.loadProfile();
-        const t = upsertTask(profile, p);
+        const prev = profile.tasks.find((t) => t.id === p.id);
+        const title = p.title ?? prev?.title;
+        const frequency = p.frequency ?? prev?.frequency;
+        if (!title || !frequency) throw missingFields("工作", p.id, ["title", "frequency"]);
+        const t = upsertTask(profile, { ...p, title, frequency });
+        if (focus) profile.focusTaskId = t.id;
         await ctx.saveProfile(profile);
         return { task: t, progress: progressLine(profile) };
       });
-      ctx.emit("state_patch", { task });
+      ctx.emit("state_patch", { task, ...(focus ? { profile: { focusTaskId: task.id } } : {}) });
       return text(`已记录工作：${task.title}（id: ${task.id}）。${progress}`);
     },
   };
@@ -128,28 +151,37 @@ export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
   const recordPainPoint = {
     name: "record_pain_point",
     label: "记录痛点",
-    description: "新增或更新一个痛点。severity 是痛苦程度，automatable 是可自动化程度，都是 1 到 5。evidence 写明依据（用户原话或具体事例）。",
+    description: "新增或更新一个痛点。本次访谈只记录用户选定要解决的那一个。新建时必须填 title、detail、severity、automatable；提供 id 则更新已有痛点，只传要改的字段，其余沿用已有的值。severity 是痛苦程度，automatable 是可自动化程度，都是 1 到 5。evidence 写明依据（用户原话或具体事例）。",
     parameters: Type.Object({
       id: Type.Optional(Type.String()),
       taskId: Type.Optional(Type.String({ description: "所属工作项的 id，即 record_task 返回的 id，不是工作项的名称" })),
-      title: Type.String(),
-      detail: Type.String(),
-      severity: Score,
-      automatable: Score,
+      title: Type.Optional(Type.String()),
+      detail: Type.Optional(Type.String()),
+      severity: Type.Optional(Score),
+      automatable: Type.Optional(Score),
       evidence: Type.Optional(Type.String()),
+      focus: Focus,
     }),
-    execute: async (_id: string, p: Parameters<typeof upsertPainPoint>[1]) => {
-      const { point, progress } = await ctx.withLock(async () => {
+    execute: async (_id: string, { focus, ...p }: PainPointPatch & { focus?: boolean }) => {
+      const { point, taskId, progress } = await ctx.withLock(async () => {
         const profile = await ctx.loadProfile();
-        const pt = upsertPainPoint(profile, p);
+        const prev = profile.painPoints.find((x) => x.id === p.id);
+        const { score: _score, assumed: _assumed, ...kept } = prev ?? ({} as Partial<PainPoint>);
+        const merged = { ...kept, ...defined(p) };
+        const { title, detail, severity, automatable } = merged;
+        if (title === undefined || detail === undefined || severity === undefined || automatable === undefined) {
+          throw missingFields("痛点", p.id, ["title", "detail", "severity", "automatable"]);
+        }
+        const pt = upsertPainPoint(profile, { ...merged, title, detail, severity, automatable });
+        if (focus) profile.focusPainPointId = pt.id;
         await ctx.saveProfile(profile);
-        return { point: pt, progress: progressLine(profile) };
+        return { point: pt, taskId: merged.taskId, progress: progressLine(profile) };
       });
-      ctx.emit("state_patch", { painPoint: point });
+      ctx.emit("state_patch", { painPoint: point, ...(focus ? { profile: { focusPainPointId: point.id } } : {}) });
       if (point.score === null) {
         // 没有关联到工作项就算不出分数：把原因和补救办法告诉模型，让它用正确的 id 重新记录
-        const why = p.taskId ? "taskId 找不到对应的工作项（要用 record_task 返回的 id，不是工作项的名称）" : "还没有关联工作项";
-        return text(`已记录痛点：${point.title}，但${why}，暂不计分。请用 record_task 返回的 id 作为 taskId，带上这个痛点的 id（${point.id}）再记录一次。${progress}`);
+        const why = taskId ? "taskId 找不到对应的工作项（要用 record_task 返回的 id，不是工作项的名称）" : "还没有关联工作项";
+        return text(`已记录痛点：${point.title}，但${why}，暂不计分。请用 record_task 返回的 id 作为 taskId，带上这个痛点的 id（${point.id}）再记录一次。${progress}`, { retry: true });
       }
       const score = point.assumed ? `优先级 ${point.score}，耗时待确认，暂按默认值估算，不必为此追问用户` : `优先级 ${point.score}`;
       return text(`已记录痛点：${point.title}（${score}）。${progress}`);
@@ -159,7 +191,7 @@ export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
   const askChoices = {
     name: "ask_choices",
     label: "给出选项",
-    description: "向用户展示选择题。调用后请结束本轮回复，等待用户选择。",
+    description: "向用户展示选择题。question 就是要问的问题，正文里不要再写一遍，最多一句不带问号的引导。调用后请结束本轮回复，等待用户选择。",
     parameters: Type.Object({
       question: Type.String(),
       options: Type.Array(Type.String(), { minItems: 2, maxItems: 6 }),
@@ -219,7 +251,7 @@ export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
   const proposeWorkflows = {
     name: "propose_workflows",
     label: "提出方案",
-    description: "给出 2 到 3 个候选自动化方案。每个方案说明解决哪些痛点（painPointIds）、预计每周节省分钟数、依赖的外部系统。",
+    description: "围绕聚焦的痛点给出 2 个自动化程度不同的候选方案。每个方案说明解决的痛点（painPointIds）、预计每周节省分钟数、依赖的外部系统。",
     parameters: Type.Object({
       candidates: Type.Array(
         Type.Object({
@@ -295,6 +327,25 @@ export function createInterviewTools(ctx: ToolContext): ToolDefinition[] {
   ];
   if (askImage) tools.push(askImage);
   return tools as ToolDefinition[];
+}
+
+/** 只把信息写进画像的工具：结果不需要模型接着处理 */
+const RECORD_TOOL_NAMES = new Set(["set_stage", "update_profile", "record_task", "record_pain_point", "record_note"]);
+
+/**
+ * 回复里已经用文字提了问题、同时调用的是记录工具时，工具执行完就该结束本轮。
+ * 否则 Agent 循环会把工具结果交回模型，模型看不到用户的回答，就会接着再问一个问题。
+ * 工具出错或要求重新记录时不结束，让模型修正。快速模式由调用方另行排除。
+ */
+export function askedWhileRecording(call: {
+  replyText: string;
+  toolName: string;
+  isError: boolean;
+  details: unknown;
+}): boolean {
+  if (call.isError || !RECORD_TOOL_NAMES.has(call.toolName)) return false;
+  if ((call.details as { retry?: boolean } | undefined)?.retry) return false;
+  return /[?？]/.test(call.replyText);
 }
 
 export const INTERVIEW_TOOL_NAMES = [

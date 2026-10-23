@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { INTERVIEW_SYSTEM_PROMPT } from "../src/agent/prompt.js";
 import { INTERVIEW_TOOL_NAMES, STAGES as TOOL_STAGES } from "../src/agent/tools.js";
 import { composePrompt } from "../src/interview/compose.js";
-import { CORE_SECTIONS, INTRO, MAX_FOLLOWUPS_PER_STAGE, MAX_REFINE_QUESTIONS, STAGES, STAGE_ORDER } from "../src/interview/core.js";
+import { CORE_SECTIONS, INTRO, MAX_DIG_QUESTIONS, MAX_REFINE_QUESTIONS, STAGES, STAGE_ORDER } from "../src/interview/core.js";
 import { WEB_ADAPTER } from "../src/interview/webAdapter.js";
 import { localAdapter } from "../src/interview/localAdapter.js";
-import { DEFAULT_MINUTES_PER_RUN, DURATION_BUCKETS, MIN_TASKS_FOR_PLAN } from "../src/domain/profile.js";
+import { DEFAULT_MINUTES_PER_RUN, DURATION_BUCKETS } from "../src/domain/profile.js";
 import { buildSkillPackage } from "../src/skillPackage/index.js";
 
 const skillMd = buildSkillPackage({ baseUrl: "https://aif.example.com" }).files.find((f) => f.path === "SKILL.md")!.content;
@@ -25,13 +25,33 @@ describe("访谈方法论核心", () => {
     expect(STAGES.map(([key]) => key)).toEqual([...TOOL_STAGES]);
   });
 
-  it("数字来自常量：追问次数、细化问题数、工作数量、默认耗时", () => {
+  it("数字来自常量：深挖问题数、细化问题数、默认耗时", () => {
     const text = CORE_SECTIONS.map((s) => s.body).join("\n");
-    expect(text).toContain(`每个阶段最多主动追问 ${MAX_FOLLOWUPS_PER_STAGE} 个问题`);
+    expect(text).toContain(`深挖最多主动问 ${MAX_DIG_QUESTIONS} 个问题`);
     expect(text).toContain(`最多再问 ${MAX_REFINE_QUESTIONS} 个问题`);
-    expect(text).toContain(`记录的工作达到 ${MIN_TASKS_FOR_PLAN} 件`);
     expect(text).toContain(STAGE_ORDER);
     expect(text).toContain(`${DEFAULT_MINUTES_PER_RUN} 分钟`);
+  });
+
+  it("一次访谈只聚焦一件工作、一个痛点；出现多个时让用户选，没选的留到下次", () => {
+    const body = CORE_SECTIONS.find((s) => s.id === "focus")!.body;
+    expect(INTRO).toContain("只聚焦用户的一件工作");
+    expect(body).toContain("不主动盘点用户的其他工作");
+    expect(body).toContain("出一道选择题");
+    expect(body).toContain("说不准，帮我挑");
+    expect(body).toContain("下次访谈再聊");
+    // 不能再有凑够几件工作才出方案的门槛
+    expect(coreText).not.toMatch(/工作达到 \d+ 件/);
+  });
+
+  it("岗位第一个问、单独一轮、不猜；选工作在下一轮；选择题的问题只写一次", () => {
+    const stages = CORE_SECTIONS.find((s) => s.id === "stages")!.body;
+    expect(stages).toContain("第一个问题问岗位");
+    expect(stages).toContain("不要根据他的描述去猜");
+    expect(stages).toContain("这一轮只问岗位，不同时出选择题");
+    expect(CORE_SECTIONS.find((s) => s.id === "focus")!.body).toContain("选工作放在问清岗位之后的下一轮");
+    expect(CORE_SECTIONS.find((s) => s.id === "method")!.body).toContain("出选择题时，问题只写一次");
+    expect(INTERVIEW_SYSTEM_PROMPT).toContain("问题只放在 question 里");
   });
 
   it("问耗时的规则：给档位选项、只问一次、说不准就不再追问；选项文字来自领域常量", () => {

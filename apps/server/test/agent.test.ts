@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { createRuntime } from "../src/agent/models.js";
 import { createSessionRegistry } from "../src/agent/registry.js";
 import { createDb, type Db } from "../src/db/client.js";
@@ -38,7 +38,8 @@ describe.skipIf(!url)("访谈 Agent（假模型 + 真实数据库）", () => {
     const wfs = await db.select({ id: workflows.id }).from(workflows).where(eq(workflows.userId, USER_ID));
     for (const w of wfs) await db.delete(workflowVersions).where(eq(workflowVersions.workflowId, w.id));
     await db.delete(workflows).where(eq(workflows.userId, USER_ID));
-    await db.delete(sessionEntries).where(eq(sessionEntries.conversationId, convId));
+    const convs = await db.select({ id: conversations.id }).from(conversations).where(eq(conversations.userId, USER_ID));
+    for (const c of convs) await db.delete(sessionEntries).where(eq(sessionEntries.conversationId, c.id));
     await db.delete(conversations).where(eq(conversations.userId, USER_ID));
     await db.delete(usageDaily).where(eq(usageDaily.userId, USER_ID));
     await db.delete(users).where(eq(users.id, USER_ID));
@@ -138,6 +139,33 @@ describe.skipIf(!url)("访谈 Agent（假模型 + 真实数据库）", () => {
     await expect(registry.prompt(USER_ID, convId, "第二条", () => {})).rejects.toThrow("处理中");
     await first;
     registry.dispose(convId);
+  }, 30000);
+
+  it("回复里提了问题又调用记录工具时，记录完就结束本轮，不再追加问题", async () => {
+    const registry = makeRegistry();
+    const id = (await createConversation(db, USER_ID)).id;
+    faux.setResponses([
+      fauxAssistantMessage([fauxText("团队有多少人？"), fauxToolCall("record_task", { title: "资讯汇总", frequency: "daily" })], { stopReason: "toolUse" }),
+      fauxAssistantMessage("除此之外，你还有哪些固定的工作？"),
+    ]);
+    const deltas: string[] = [];
+    await registry.prompt(USER_ID, id, "我每天早上看资讯并总结", (e, d) => e === "text_delta" && deltas.push((d as any).delta));
+    expect(deltas.join("")).toBe("团队有多少人？");
+    expect(faux.getPendingResponseCount()).toBe(1);
+    registry.dispose(id);
+    faux.setResponses([]);
+  }, 30000);
+
+  it("快速模式下不拦截，模型可以接着出方案", async () => {
+    const registry = makeRegistry();
+    const id = (await createConversation(db, USER_ID)).id;
+    faux.setResponses([
+      fauxAssistantMessage([fauxText("还有别的吗？"), fauxToolCall("record_note", { kind: "pending", text: "耗时" })], { stopReason: "toolUse" }),
+      fauxAssistantMessage("下面给出方案。"),
+    ]);
+    await registry.prompt(USER_ID, id, "没有了，直接生成", () => {}, { generateNow: true });
+    expect(faux.getPendingResponseCount()).toBe(0);
+    registry.dispose(id);
   }, 30000);
 
   it("记录用量到 usage_daily", async () => {
