@@ -1,5 +1,9 @@
 import { parseSecretKey } from "./auth/secretBox.js";
 
+/** 访谈 Agent 的思考等级（Pi 的 thinkingLevel），off 为关闭 */
+export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high"] as const;
+export type AgentThinkingLevel = (typeof THINKING_LEVELS)[number];
+
 export interface AppConfig {
   databaseUrl: string;
   port: number;
@@ -21,6 +25,8 @@ export interface AppConfig {
   attachmentDailyLimitPerUser: number;
   /** 访谈 Agent 使用的模型，格式 provider/modelId */
   agentModel: string;
+  /** 访谈 Agent 的思考等级；默认 high：弱模型不思考时常常说了"记下来"却不调用工具 */
+  agentThinkingLevel: AgentThinkingLevel;
   /** 生成工作流 IR 使用的模型 */
   workflowModel: string;
   erpBaseUrl: string;
@@ -43,6 +49,14 @@ export interface AppConfig {
 const bool = (v: string | undefined, def: boolean) =>
   v === undefined || v === "" ? def : ["true", "1", "yes"].includes(v.toLowerCase());
 const num = (v: string | undefined, def: number) => (v && v.trim() !== "" ? Number(v) : def);
+const thinkingLevel = (v: string | undefined, def: AgentThinkingLevel): AgentThinkingLevel => {
+  if (v === undefined || v.trim() === "") return def;
+  const level = v.trim().toLowerCase();
+  if (!(THINKING_LEVELS as readonly string[]).includes(level)) {
+    throw new Error(`AGENT_THINKING_LEVEL 取值无效：${v}，可选 ${THINKING_LEVELS.join("、")}`);
+  }
+  return level as AgentThinkingLevel;
+};
 const list = (v: string | undefined) => (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -62,6 +76,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     attachmentMaxPerMessage: num(env.ATTACHMENT_MAX_PER_MESSAGE, 4),
     attachmentDailyLimitPerUser: num(env.ATTACHMENT_DAILY_LIMIT_PER_USER, 50),
     agentModel: env.AGENT_MODEL || "deepseek/deepseek-flash",
+    agentThinkingLevel: thinkingLevel(env.AGENT_THINKING_LEVEL, "high"),
     workflowModel: env.WORKFLOW_MODEL || "deepseek/deepseek-v4-pro",
     erpBaseUrl: env.ERP_BASE_URL || "https://erp.tourmind.cn",
     ssoAppCode: env.SSO_APP_CODE ?? "",

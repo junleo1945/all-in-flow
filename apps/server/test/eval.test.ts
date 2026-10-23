@@ -76,9 +76,9 @@ describe.skipIf(!url)("评测运行器（假模型：Agent 与模拟用户共用
     expect(result.run.taskCount).toBe(1);
     expect(result.run.firstWorkflowTurn).toBeDefined();
     expect(result.run.workflowValidity).toEqual([true]);
-    // 痛点"手工导出并透视订单"命中人设中的 sa1（关键词：透视、导出、手工）
-    expect(result.metrics.recalledIds).toContain("sa1");
-    expect(result.metrics.recall).toBeGreaterThan(0);
+    // 只记录了一个痛点，它就是聚焦的痛点："手工导出并透视订单"命中人设中的 sa1（关键词：透视、导出、手工）
+    expect(result.metrics.focusedId).toBe("sa1");
+    expect(result.metrics.extraTasks).toBe(0);
   }, 20000);
 });
 

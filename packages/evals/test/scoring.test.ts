@@ -6,30 +6,27 @@ const sales = PERSONAS.find((p) => p.id === "sales-ops")!;
 
 const perfect: EvalRun = {
   personaId: "sales-ops",
-  painPoints: [
-    { title: "手工导出并透视订单", detail: "每周都要做透视", score: 4200 },
-    { title: "挨个私聊核对异常订单", detail: "催了好几次", score: 3600 },
-    { title: "催单消息分散在群里", detail: "经常漏看", score: 1800 },
-  ],
-  taskCount: 3,
+  painPoints: [{ title: "手工导出并透视订单", detail: "每周都要做透视", score: 4200 }],
+  focusPainPoint: { title: "手工导出并透视订单", detail: "每周都要做透视" },
+  taskCount: 1,
   turns: 9,
   firstWorkflowTurn: 9,
   firstProposeTurn: 8,
-  tasksAtFirstPropose: 3,
+  painPointsAtFirstPropose: 1,
   workflowValidity: [true],
 };
 
-describe("痛点召回", () => {
-  it("关键词命中即视为挖出", () => {
+describe("聚焦命中", () => {
+  it("聚焦的痛点命中人设里的某个隐藏痛点", () => {
     const m = scoreRun(sales, perfect);
-    expect(m.recall).toBe(1);
-    expect(m.missedIds).toEqual([]);
+    expect(m.focusHit).toBe(true);
+    expect(m.focusedId).toBe("sa1");
   });
 
-  it("没挖出的痛点列在 missedIds 中", () => {
-    const m = scoreRun(sales, { ...perfect, painPoints: [perfect.painPoints[0]!] });
-    expect(m.recall).toBeCloseTo(1 / 3);
-    expect(m.missedIds).toEqual(["sa2", "sa3"]);
+  it("没有选定聚焦痛点时不算命中", () => {
+    const m = scoreRun(sales, { ...perfect, focusPainPoint: undefined });
+    expect(m.focusHit).toBe(false);
+    expect(m.focusedId).toBeNull();
   });
 
   it("关键词匹配不区分大小写", () => {
@@ -37,17 +34,23 @@ describe("痛点召回", () => {
       id: "x", role: "x", background: "", style: "",
       hiddenPainPoints: [{ id: "h", description: "", keywords: ["Excel"], frequency: "daily" as const, minutesPerRun: 1 }],
     };
-    const m = scoreRun(custom, { ...perfect, personaId: "x", painPoints: [{ title: "在 excel 里透视", detail: "", score: null }] });
-    expect(m.recalledIds).toEqual(["h"]);
+    const m = scoreRun(custom, { ...perfect, personaId: "x", focusPainPoint: { title: "在 excel 里透视", detail: "" } });
+    expect(m.focusedId).toBe("h");
   });
 
   it("无关的痛点不会被误判为命中", () => {
     const m = scoreRun(PERSONAS.find((p) => p.id === "developer")!, {
       ...perfect,
       personaId: "developer",
-      painPoints: [{ title: "报销单据要逐张核对", detail: "", score: null }],
+      focusPainPoint: { title: "报销单据要逐张核对", detail: "" },
     });
-    expect(m.recalledIds).not.toContain("dev1");
+    expect(m.focusedId).not.toBe("dev1");
+  });
+
+  it("多记录的工作件数说明访谈发散了", () => {
+    expect(scoreRun(sales, perfect).extraTasks).toBe(0);
+    expect(scoreRun(sales, { ...perfect, taskCount: 3 }).extraTasks).toBe(2);
+    expect(scoreRun(sales, { ...perfect, taskCount: 0 }).extraTasks).toBe(0);
   });
 });
 
@@ -72,15 +75,15 @@ describe("效率与合法率", () => {
 });
 
 describe("过早下结论", () => {
-  it("工作项少于 3 个就提出方案记为过早", () => {
-    expect(scoreRun(sales, { ...perfect, tasksAtFirstPropose: 1 }).prematureConclusion).toBe(true);
-    expect(scoreRun(sales, { ...perfect, tasksAtFirstPropose: 3 }).prematureConclusion).toBe(false);
+  it("还没挖出痛点就提出方案记为过早；挖出一个就够", () => {
+    expect(scoreRun(sales, { ...perfect, painPointsAtFirstPropose: 0 }).prematureConclusion).toBe(true);
+    expect(scoreRun(sales, { ...perfect, painPointsAtFirstPropose: 1 }).prematureConclusion).toBe(false);
   });
 
   it("从未提出方案时不算过早", () => {
-    expect(scoreRun(sales, { ...perfect, firstProposeTurn: undefined, tasksAtFirstPropose: 0 }).prematureConclusion).toBe(false);
+    expect(scoreRun(sales, { ...perfect, firstProposeTurn: undefined, painPointsAtFirstPropose: 0 }).prematureConclusion).toBe(false);
     // 用户要求直接出结果（快速模式）时，提前出方案不算过早下结论
-    expect(scoreRun(sales, { ...perfect, tasksAtFirstPropose: 1, fastTrack: true }).prematureConclusion).toBe(false);
+    expect(scoreRun(sales, { ...perfect, painPointsAtFirstPropose: 0, fastTrack: true }).prematureConclusion).toBe(false);
   });
 });
 
@@ -91,14 +94,15 @@ describe("汇总与对比", () => {
     const s = summarize([a, b]);
     expect(s.turnsToWorkflow).toBe(9);
     expect(s.workflowRate).toBe(0.5);
-    expect(s.recall).toBe(1);
+    expect(s.focusRate).toBe(1);
   });
 
   it("与基线对比得到变化量", () => {
     const cur = summarize([scoreRun(sales, perfect)]);
-    const base = summarize([scoreRun(sales, { ...perfect, painPoints: [] })]);
+    const base = summarize([scoreRun(sales, { ...perfect, focusPainPoint: undefined, taskCount: 3 })]);
     const d = compare(cur, base);
-    expect(d.recall).toBeCloseTo(1);
+    expect(d.focusRate).toBeCloseTo(1);
+    expect(d.extraTasks).toBeCloseTo(-2);
   });
 
   it("markdown 表格包含每个人设与平均行", () => {
@@ -219,7 +223,7 @@ describe("耗时相关指标", () => {
     const diff = compare(current, oldBaseline);
     expect(diff.timeKnown).toBeNull();
     expect(diff.timeQuestions).toBeNull();
-    expect(diff.recall).toBe(0);
+    expect(diff.focusRate).toBe(0);
   });
 
   it("报告里有耗时已知和追问耗时两列", () => {
@@ -227,7 +231,7 @@ describe("耗时相关指标", () => {
     const md = toMarkdown([m], summarize([m]));
     expect(md).toContain("耗时已知");
     expect(md).toContain("追问耗时");
-    expect(md).toMatch(/\| sales-ops \| 100% \| 100% \| 100% \| 5 \|/);
+    expect(md).toMatch(/\| sales-ops \| sa1 \| 0 \| 100% \| 100% \| 5 \|/);
   });
 
   it("人设里有三个「说不清耗时」的变体，和原人设的痛点一致", () => {

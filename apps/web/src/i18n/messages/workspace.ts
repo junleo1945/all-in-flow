@@ -4,9 +4,8 @@ export const workspace: Messages = {
   zh: {
     // 阶段 / 频率
     "stage.role": "了解角色",
-    "stage.inventory": "盘点工作",
+    "stage.focus": "选定工作",
     "stage.dig": "深挖痛点",
-    "stage.rank": "量化排序",
     "stage.propose": "提出方案",
     "stage.generate": "生成工作流",
     "stage.notStarted": "刚开始",
@@ -145,9 +144,8 @@ export const workspace: Messages = {
   },
   en: {
     "stage.role": "Understand role",
-    "stage.inventory": "Inventory tasks",
-    "stage.dig": "Dig into pain points",
-    "stage.rank": "Quantify and rank",
+    "stage.focus": "Choose a task",
+    "stage.dig": "Dig into the pain point",
     "stage.propose": "Propose solutions",
     "stage.generate": "Generate workflow",
     "stage.notStarted": "Just started",

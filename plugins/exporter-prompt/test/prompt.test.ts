@@ -155,8 +155,24 @@ describe("对话提示词的质量：适配普通聊天窗口", () => {
     expect(md).not.toContain("v2");
   });
 
-  it("说明 AI 在聊天窗口里的能力边界", () => {
-    expect(renderPrompt(v2Sample())).toContain("无法登录或访问任何系统，无法联网，无法运行代码");
+  it("只写聊天窗口一定做不到的；联网、读文件、运行代码能用就用，没做到不说已完成", () => {
+    for (const md of [renderPrompt(v2Sample()), renderPrompt(v2Sample(), { variant: "short" })]) {
+      expect(md).toContain("不会定时执行");
+      expect(md).toContain("无法登录用户公司的内部系统");
+      expect(md).toContain("不要索要账号密码");
+      expect(md).toMatch(/能联网、读(取上传的)?文件或运行代码/);
+      expect(md).toMatch(/没(有)?真(的|正)/);
+      // 不再一刀切地禁止联网和运行代码
+      expect(md).not.toContain("无法联网");
+      expect(md).not.toContain("无法运行代码");
+    }
+  });
+
+  it("需要用户操作的步骤：不用登录又能直接完成的就自己做，否则请用户操作", () => {
+    const md = renderPrompt(nested());
+    expect(md).toContain("不需要登录、你又确实能直接完成的（例如联网打开公开网页、读取用户已上传的文件），就直接做");
+    expect(md).toContain("能运行代码就用代码处理");
+    expect(renderPrompt(nested(), { variant: "short" })).toContain("不用登录且你能直接完成的就直接做");
   });
 
   it("用户操作的步骤改写成请用户去做，并说明要贴回什么，不再写给程序看的说明", () => {
@@ -196,7 +212,8 @@ describe("对话提示词的质量：适配普通聊天窗口", () => {
     const md = renderPrompt(nested(), { variant: "short" });
     expect(md.length).toBeLessThanOrEqual(2000);
     expect(md).toContain("请把订单列表粘贴到对话里，我再继续。");
-    expect(md).not.toContain("## 你的工作环境\n\n你在普通聊天窗口里工作：无法登录或访问任何系统");
+    // 精简版用的是压缩后的一段，不是完整版的三句
+    expect(md).not.toContain("例如打开公开网页、处理用户上传的表格");
     expect(renderPrompt(v2Sample(), { variant: "short" }).length).toBeLessThanOrEqual(2000);
   });
 

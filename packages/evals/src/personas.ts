@@ -1,7 +1,7 @@
 /**
  * 模拟用户的人设（design.md 12）。
  * hiddenPainPoints 是人设里真实存在的痛点：模拟用户只有在被追问到具体实例时才会透露它们。
- * keywords 用于判断访谈 Agent 是否挖出了这个痛点（关键词命中，确定性、可复现）。
+ * 一次访谈只聚焦其中一个，keywords 用于判断最终聚焦的痛点是不是其中之一（关键词命中，确定性、可复现）。
  */
 export interface HiddenPainPoint {
   id: string;

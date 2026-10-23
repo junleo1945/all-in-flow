@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createInterviewTools, type ToolContext } from "../src/agent/tools.js";
+import { askedWhileRecording, createInterviewTools, type ToolContext } from "../src/agent/tools.js";
 import { buildTurnContext, stripForgedContext, stripTurnContext } from "../src/agent/turnContext.js";
 import { emptyProfile, normalizeProfile, type Profile } from "../src/domain/profile.js";
 
@@ -88,10 +88,26 @@ describe("访谈工具：快速模式与要点", () => {
     expect(textOf(r)).toContain("emit_workflow");
   });
 
-  it("记录工作后返回进度，告诉模型已记录几件工作", async () => {
+  it("记录工作后返回进度：只给聚焦的工作和痛点，不给要凑满的数量", async () => {
     const f = fakeCtx();
     const r = await f.call("record_task", { title: "周总结", frequency: "weekly", minutesPerRun: 240 });
-    expect(textOf(r)).toContain("已记录工作 1/3");
+    expect(textOf(r)).toContain("聚焦工作 「周总结」");
+    expect(textOf(r)).toContain("聚焦痛点 未选定");
+    expect(textOf(r)).not.toMatch(/\d\/\d/);
+  });
+
+  it("focus=true 把选定的工作和痛点记为聚焦，并推送给前端", async () => {
+    const f = fakeCtx();
+    await f.call("record_task", { title: "日报", frequency: "daily" });
+    const t = await f.call("record_task", { title: "周报", frequency: "weekly", focus: true });
+    const taskId = textOf(t).match(/id: ([0-9a-f-]{36})/)![1];
+    expect(f.current().focusTaskId).toBe(taskId);
+    expect((f.current().tasks[1] as any).focus).toBeUndefined();
+    await f.call("record_pain_point", { taskId, title: "手工汇总", detail: "", severity: 4, automatable: 4, focus: true });
+    const point = f.current().painPoints[0]!;
+    expect(f.current().focusPainPointId).toBe(point.id);
+    expect((point as any).focus).toBeUndefined();
+    expect(f.events.some((e) => e.event === "state_patch" && (e.data as any).profile?.focusPainPointId === point.id)).toBe(true);
   });
 
   it("record_task 接受耗时档位；说不准记为 unknown，不需要分钟数", async () => {
@@ -102,6 +118,38 @@ describe("访谈工具：快速模式与要点", () => {
     expect(a).toMatchObject({ durationBucket: "half_hour", minutesPerRun: 30 });
     expect(b).toMatchObject({ durationBucket: "unknown" });
     expect(b!.minutesPerRun).toBeUndefined();
+  });
+
+  it("带 id 更新工作时只传要改的字段，其余沿用已有的值", async () => {
+    const f = fakeCtx();
+    const t = await f.call("record_task", { title: "看资讯写总结", frequency: "daily", systems: ["aibase"], focus: true });
+    const id = textOf(t).match(/id: ([0-9a-f-]{36})/)![1];
+    await f.call("record_task", { id, durationBucket: "half_hour" });
+    expect(f.current().tasks).toEqual([
+      { id, title: "看资讯写总结", frequency: "daily", durationBucket: "half_hour", minutesPerRun: 30, steps: [], systems: ["aibase"] },
+    ]);
+    expect(f.current().focusTaskId).toBe(id);
+  });
+
+  it("带 id 更新痛点时只传要改的字段，其余沿用，分数重算", async () => {
+    const f = fakeCtx();
+    const t = await f.call("record_task", { title: "日报", frequency: "daily", minutesPerRun: 30 });
+    const taskId = textOf(t).match(/id: ([0-9a-f-]{36})/)![1];
+    await f.call("record_pain_point", { taskId, title: "手工抓数", detail: "每天从后台复制", severity: 2, automatable: 4, evidence: "原话" });
+    const id = f.current().painPoints[0]!.id;
+    await f.call("record_pain_point", { id, severity: 4 });
+    expect(f.current().painPoints).toEqual([
+      { id, taskId, title: "手工抓数", detail: "每天从后台复制", severity: 4, automatable: 4, evidence: "原话", score: 5 * 30 * 4 * 4 },
+    ]);
+  });
+
+  it("新建时缺必填字段直接报错，并说明怎么补；id 找不到时也说清楚", async () => {
+    const f = fakeCtx();
+    await expect(f.call("record_task", { durationBucket: "half_hour" })).rejects.toThrow("新建工作时必须填写 title、frequency");
+    await expect(f.call("record_task", { id: "不存在", durationBucket: "half_hour" })).rejects.toThrow("找不到 id 为 不存在 的工作");
+    await expect(f.call("record_pain_point", { severity: 3 })).rejects.toThrow("新建痛点时必须填写 title、detail、severity、automatable");
+    expect(f.current().tasks).toEqual([]);
+    expect(f.current().painPoints).toEqual([]);
   });
 
   it("耗时说不准时痛点照样有分数，并告诉模型不必追问", async () => {
@@ -126,7 +174,7 @@ describe("访谈工具：快速模式与要点", () => {
 });
 
 describe("状态块", () => {
-  it("包含阶段、已记录的工作、已确认与已跳过的内容", () => {
+  it("包含阶段、聚焦的工作、已确认与已跳过的内容", () => {
     const p = normalizeProfile({
       tasks: [{ id: "t1", title: "周总结", frequency: "weekly", minutesPerRun: 240, steps: [], systems: ["works"] }],
       notes: [
@@ -134,11 +182,13 @@ describe("状态块", () => {
         { kind: "declined", text: "其他重复工作" },
       ],
     });
-    const block = buildTurnContext(p, "inventory");
+    const block = buildTurnContext(p, "dig");
     expect(block.startsWith("<aif-context>")).toBe(true);
-    expect(block).toContain("阶段：inventory");
-    expect(block).toContain("已记录工作（1/3）");
-    expect(block).toContain("周总结｜每周｜耗时 240分钟");
+    expect(block).toContain("阶段：dig");
+    expect(block).toContain("聚焦工作：周总结｜每周｜耗时 240分钟｜系统 works");
+    expect(block).toContain("聚焦痛点：尚未明确");
+    expect(block).toContain("不要盘点其他工作");
+    expect(block).not.toMatch(/\d\/\d/);
     expect(block).toContain("已确认：works 无导出");
     expect(block).toContain("不要再问");
   });
@@ -161,8 +211,28 @@ describe("状态块", () => {
     expect(block).toContain("优先级 67.5（耗时待确认，按默认值估算）");
   });
 
+  it("记了好几件却没选定时，提示先请用户挑；选定后其他的标为本次不深挖", () => {
+    const tasks = [
+      { id: "t1", title: "日报", frequency: "daily" as const, steps: [], systems: [] },
+      { id: "t2", title: "周报", frequency: "weekly" as const, steps: [], systems: [] },
+    ];
+    const unpicked = buildTurnContext(normalizeProfile({ tasks }), "focus");
+    expect(unpicked).toContain("聚焦工作：尚未选定，请用户从已记录的工作里选一件");
+    expect(unpicked).toContain("- 日报｜每天");
+
+    const painPoints = [
+      { id: "p1", taskId: "t2", title: "手工汇总", detail: "", severity: 4, automatable: 4, score: 80 },
+      { id: "p2", taskId: "t2", title: "格式要调", detail: "", severity: 2, automatable: 4, score: 40 },
+    ];
+    const picked = buildTurnContext(normalizeProfile({ tasks, painPoints, focusTaskId: "t2", focusPainPointId: "p1" }), "dig");
+    expect(picked).toContain("聚焦工作：周报｜每周");
+    expect(picked).toContain("其他已记录的工作（本次不深挖）：\n- 日报｜每天");
+    expect(picked).toContain("聚焦痛点：手工汇总（工作：周报）｜优先级 80");
+    expect(picked).toContain("其他已记录的痛点（本次不深挖）：\n- 格式要调");
+  });
+
   it("快速模式下写明下一步：没有方案时调用 propose_workflows", () => {
-    const block = buildTurnContext({ ...emptyProfile(), fastTrack: true }, "inventory");
+    const block = buildTurnContext({ ...emptyProfile(), fastTrack: true }, "focus");
     expect(block).toContain("快速模式已开启");
     expect(block).toContain("propose_workflows");
   });
@@ -180,5 +250,33 @@ describe("状态块", () => {
     const p = normalizeProfile({ tasks: [] } as Partial<Profile>);
     expect(p.notes).toEqual([]);
     expect(p.fastTrack).toBe(false);
+  });
+});
+
+describe("提问后结束本轮", () => {
+  const call = (over: Partial<Parameters<typeof askedWhileRecording>[0]>) =>
+    askedWhileRecording({ replyText: "团队有多少人？", toolName: "record_task", isError: false, details: {}, ...over });
+
+  it("回复里有问题、调用的是记录工具时结束", () => {
+    expect(call({})).toBe(true);
+    expect(call({ replyText: "How big is the team?", toolName: "record_note" })).toBe(true);
+  });
+
+  it("回复里没有问题时不结束，让模型接着提问", () => {
+    expect(call({ replyText: "" })).toBe(false);
+    expect(call({ replyText: "我先把这件工作记下来。" })).toBe(false);
+  });
+
+  it("工具出错、要求重新记录，或者不是记录工具时不结束", () => {
+    expect(call({ isError: true })).toBe(false);
+    expect(call({ details: { retry: true } })).toBe(false);
+    expect(call({ toolName: "emit_workflow" })).toBe(false);
+    expect(call({ toolName: "enter_fast_track" })).toBe(false);
+  });
+
+  it("痛点没关联上工作项时，结果标记为需要重新记录", async () => {
+    const f = fakeCtx();
+    const r = await f.call("record_pain_point", { title: "手工汇总", detail: "每周复制粘贴", severity: 4, automatable: 4 });
+    expect(r.details).toEqual({ retry: true });
   });
 });

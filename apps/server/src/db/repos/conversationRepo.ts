@@ -2,7 +2,7 @@ import { and, asc, desc, eq, isNull, max, sql } from "drizzle-orm";
 import type { FileEntry } from "@earendil-works/pi-coding-agent";
 import type { Db } from "../client.js";
 import { conversations, sessionEntries } from "../schema/index.js";
-import { emptyProfile, type Profile } from "../../domain/profile.js";
+import { emptyProfile, normalizeStage, type Profile } from "../../domain/profile.js";
 
 export class ConversationNotFound extends Error {}
 
@@ -21,12 +21,12 @@ export async function getConversation(db: Db, userId: number, id: string) {
     .from(conversations)
     .where(and(eq(conversations.id, id), eq(conversations.userId, userId), isNull(conversations.deletedAt)));
   if (!row) throw new ConversationNotFound("会话不存在");
-  return row;
+  return { ...row, stage: normalizeStage(row.stage) };
 }
 
 /** 置顶的排在最前（按置顶时间倒序），其余按最近更新倒序 */
 export async function listConversations(db: Db, userId: number) {
-  return db
+  const rows = await db
     .select({
       id: conversations.id,
       title: conversations.title,
@@ -37,6 +37,7 @@ export async function listConversations(db: Db, userId: number) {
     .from(conversations)
     .where(and(eq(conversations.userId, userId), isNull(conversations.deletedAt)))
     .orderBy(sql`${conversations.pinnedAt} desc nulls last`, desc(conversations.updatedAt));
+  return rows.map((r) => ({ ...r, stage: normalizeStage(r.stage) }));
 }
 
 export async function softDeleteConversation(db: Db, userId: number, id: string) {

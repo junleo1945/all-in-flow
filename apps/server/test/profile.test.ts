@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_MINUTES_PER_RUN, DURATION_BUCKETS, emptyProfile, rankPainPoints, scorePainPoint, upsertPainPoint, upsertTask } from "../src/domain/profile.js";
+import { DEFAULT_MINUTES_PER_RUN, DURATION_BUCKETS, emptyProfile, focusOf, normalizeStage, rankPainPoints, scorePainPoint, upsertPainPoint, upsertTask } from "../src/domain/profile.js";
 
 describe("痛点打分（design.md 5.2）", () => {
   it("优先级 = 频率 × 单次耗时 × 痛苦 × 可自动化", () => {
@@ -70,5 +70,29 @@ describe("痛点打分（design.md 5.2）", () => {
     upsertPainPoint(p, { title: "改表", detail: "", severity: 5, automatable: 4, taskId: task.id });
     upsertTask(p, { id: task.id, title: "对账", frequency: "monthly", minutesPerRun: 120 });
     expect(p.painPoints[0]!.score).toBe(0.25 * 120 * 5 * 4);
+  });
+});
+
+describe("聚焦与阶段", () => {
+  it("选定过的优先；没选定时只记了一件、一个的就是聚焦；记了好几件没选定时为空", () => {
+    const p = emptyProfile();
+    expect(focusOf(p)).toEqual({ task: undefined, painPoint: undefined });
+    const a = upsertTask(p, { title: "日报", frequency: "daily" });
+    const pain = upsertPainPoint(p, { taskId: a.id, title: "手工抓数", detail: "", severity: 4, automatable: 4 });
+    expect(focusOf(p)).toEqual({ task: a, painPoint: pain });
+    const b = upsertTask(p, { title: "周报", frequency: "weekly" });
+    expect(focusOf(p).task).toBeUndefined();
+    p.focusTaskId = b.id;
+    // 聚焦的工作下还没有痛点，别的工作的痛点不算
+    expect(focusOf(p)).toEqual({ task: b, painPoint: undefined });
+    p.focusPainPointId = pain.id;
+    expect(focusOf(p).painPoint).toBe(pain);
+  });
+
+  it("旧的阶段取值换成现在的阶段，未知的回到 role", () => {
+    expect(normalizeStage("inventory")).toBe("focus");
+    expect(normalizeStage("rank")).toBe("dig");
+    expect(normalizeStage("propose")).toBe("propose");
+    expect(normalizeStage("whatever")).toBe("role");
   });
 });

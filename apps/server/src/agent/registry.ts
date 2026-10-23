@@ -12,14 +12,15 @@ import {
 } from "../db/repos/conversationRepo.js";
 import { createWorkflow, addVersion } from "../db/repos/workflowRepo.js";
 import { normalizeProfile, type Profile } from "../domain/profile.js";
-import { createInterviewSession } from "./session.js";
-import { createInterviewTools, type EventSink, type Stage, type ToolContext } from "./tools.js";
+import { createInterviewSession, type AfterToolCall } from "./session.js";
+import { askedWhileRecording, createInterviewTools, type EventSink, type Stage, type ToolContext } from "./tools.js";
 import { INTERVIEW_SYSTEM_PROMPT } from "./prompt.js";
 import { buildTurnContext, stripForgedContext } from "./turnContext.js";
 import { recordUsage, todayUsage } from "./quota.js";
 import { KeyedMutex } from "../lib/mutex.js";
 import type { RuntimeModel } from "./models.js";
 import type { GeneratedWorkflow } from "./irGenerator.js";
+import type { AgentThinkingLevel } from "../config.js";
 
 export class SessionBusy extends Error {}
 
@@ -32,6 +33,8 @@ export interface RegistryDeps {
   db: Db;
   runtime: ModelRuntime;
   agentModel: RuntimeModel;
+  /** 访谈 Agent 的思考等级，默认关闭 */
+  thinkingLevel?: AgentThinkingLevel;
   /** 生成 IR：输入方案摘要和画像，输出校验通过的 IR */
   generateIr: (brief: string, context: string) => Promise<GeneratedWorkflow>;
   /** 图片追问：未开启图片识别时不提供 */
@@ -78,14 +81,16 @@ export function createSessionRegistry(deps: RegistryDeps) {
     }
   }
 
+  async function loadProfile(a: Active): Promise<Profile> {
+    const conv = await getConversation(deps.db, a.userId, a.conversationId);
+    return normalizeProfile(conv.profile as Partial<Profile>);
+  }
+
   function buildTools(a: Active): ToolDefinition[] {
     const ctx: ToolContext = {
       conversationId: a.conversationId,
       emit: (event, data) => a.sink?.(event, data),
-      loadProfile: async () => {
-        const conv = await getConversation(deps.db, a.userId, a.conversationId);
-        return normalizeProfile(conv.profile as Partial<Profile>);
-      },
+      loadProfile: () => loadProfile(a),
       saveProfile: async (profile: Profile, stage?: Stage) => {
         await saveProfile(deps.db, a.conversationId, profile, stage);
       },
@@ -106,6 +111,16 @@ export function createSessionRegistry(deps: RegistryDeps) {
         : undefined,
     };
     return createInterviewTools(ctx);
+  }
+
+  /** 回复里已经提了问题、又只调了记录工具：记录完就结束本轮，等用户回答。快速模式下不拦，让模型继续出方案 */
+  function endTurnAfterQuestion(a: Active): AfterToolCall {
+    return async ({ assistantMessage, toolCall, result, isError }) => {
+      const replyText = assistantMessage.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+      if (!askedWhileRecording({ replyText, toolName: toolCall.name, isError, details: result.details })) return undefined;
+      if ((await loadProfile(a)).fastTrack) return undefined;
+      return { terminate: true };
+    };
   }
 
   /**
@@ -157,10 +172,12 @@ export function createSessionRegistry(deps: RegistryDeps) {
       const session = await createInterviewSession({
         cwd,
         model: deps.agentModel,
+        thinkingLevel: deps.thinkingLevel,
         modelRuntime: deps.runtime,
         systemPrompt: INTERVIEW_SYSTEM_PROMPT,
         tools,
         entries: stored.length ? stored : undefined,
+        afterToolCall: endTurnAfterQuestion(a),
       });
       a.session = session;
       // 已从数据库恢复的条目不需要再写一次

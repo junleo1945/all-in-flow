@@ -6,6 +6,7 @@ import { createConversation, getConversation } from "../db/repos/conversationRep
 import { createSessionRegistry } from "../agent/registry.js";
 import type { RuntimeModel } from "../agent/models.js";
 import type { GeneratedWorkflow } from "../agent/irGenerator.js";
+import { focusOf, normalizeProfile } from "../domain/profile.js";
 
 /** 模拟用户的系统提示词必须包含"扮演"，运行时据此区分用户模拟与访谈 Agent（见 test/eval.test.ts 的假模型） */
 export const USER_SIM_MARKER = "你正在扮演";
@@ -64,7 +65,7 @@ export async function runPersona(opts: EvalOptions, persona: Persona): Promise<P
     actionCoverage: [],
     executability: [],
   };
-  const taskIds = new Set<string>();
+  const painPointIds = new Set<string>();
 
   let userMsg = "你好，我想聊聊我的日常工作，看看哪些可以自动化。";
   let workflowTurnsLeft = -1;
@@ -79,11 +80,11 @@ export async function runPersona(opts: EvalOptions, persona: Persona): Promise<P
     await registry.prompt(opts.evalUserId, conv.id, userMsg, (event, data: any) => {
       if (event === "text_delta") reply += data.delta;
       if (event === "state_patch") {
-        if (data.task) taskIds.add(data.task.id);
+        if (data.painPoint) painPointIds.add(data.painPoint.id);
         if (data.profile?.fastTrack === true) run.fastTrack = true;
         if (Array.isArray(data.candidates) && run.firstProposeTurn === undefined) {
           run.firstProposeTurn = turn;
-          run.tasksAtFirstPropose = taskIds.size;
+          run.painPointsAtFirstPropose = painPointIds.size;
           proposed = true;
         }
       }
@@ -118,6 +119,8 @@ export async function runPersona(opts: EvalOptions, persona: Persona): Promise<P
   run.painPoints = (profile.painPoints ?? []).map((p: any) => ({ title: p.title, detail: p.detail, score: p.score, assumed: p.assumed }));
   run.timeQuestions = countTimeQuestions(transcript.filter((m) => m.role === "assistant").map((m) => m.text));
   run.taskCount = (profile.tasks ?? []).length;
+  const focus = focusOf(normalizeProfile(profile)).painPoint;
+  if (focus) run.focusPainPoint = { title: focus.title, detail: focus.detail };
 
   registry.dispose(conv.id);
   return { metrics: scoreRun(persona, run), run, transcript };

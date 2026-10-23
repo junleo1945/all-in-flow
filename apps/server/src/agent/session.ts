@@ -13,6 +13,11 @@ import {
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import type { RuntimeModel } from "./models.js";
+import type { AgentThinkingLevel } from "../config.js";
+
+type AgentHooks = AgentSession["agent"];
+/** 工具执行完后的钩子，可以改写结果，例如设置 terminate 结束本轮 */
+export type AfterToolCall = NonNullable<AgentHooks["afterToolCall"]>;
 
 /** 空的 agentDir：Pi 不会读取 ~/.pi 下的任何配置、扩展或技能。 */
 const EMPTY_AGENT_DIR = mkdtempSync(join(tmpdir(), "aif-agentdir-"));
@@ -21,12 +26,15 @@ export interface SessionOptions {
   /** 每个会话一个空的临时目录，即使有疏漏也碰不到项目文件 */
   cwd: string;
   model: RuntimeModel;
+  /** 思考等级，默认关闭；目前只有访谈 Agent 按配置开启 */
+  thinkingLevel?: AgentThinkingLevel;
   modelRuntime: ModelRuntime;
   systemPrompt: string;
   /** 自定义工具，名称同时作为白名单 */
   tools: ToolDefinition[];
   /** 恢复时传入已持久化的条目（第一条为 header） */
   entries?: FileEntry[];
+  afterToolCall?: AfterToolCall;
 }
 
 /**
@@ -58,7 +66,7 @@ export async function createInterviewSession(opts: SessionOptions): Promise<Agen
     cwd: opts.cwd,
     agentDir: EMPTY_AGENT_DIR,
     model: opts.model,
-    thinkingLevel: "off",
+    thinkingLevel: opts.thinkingLevel ?? "off",
     modelRuntime: opts.modelRuntime,
     resourceLoader: staticResourceLoader(opts.systemPrompt),
     customTools: opts.tools,
@@ -69,5 +77,15 @@ export async function createInterviewSession(opts: SessionOptions): Promise<Agen
       retry: { enabled: true, maxRetries: 2 },
     }),
   });
+  if (opts.afterToolCall) {
+    // AgentSession 自己已经装了一个钩子（扩展和图片处理），接在它后面，两者的改写合并
+    const own = session.agent.afterToolCall;
+    const extra = opts.afterToolCall;
+    session.agent.afterToolCall = async (context, signal) => {
+      const base = await own?.(context, signal);
+      const more = await extra(context, signal);
+      return base || more ? { ...base, ...more } : undefined;
+    };
+  }
   return session;
 }
